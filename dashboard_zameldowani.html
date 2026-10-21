@@ -1,0 +1,2090 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Ewidencji Ludności — Liczba Zameldowanych Dzieci w Obwodach Szkolnych (Roczniki 2001–2026) - wg stanu na dzień 21.10.2026 r.</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --surface-alt: #f8fafc;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --text-light: #64748b;
+      --primary: #1d4ed8;
+      --primary-light: #dbeafe;
+      --primary-hover: #1e40af;
+      --accent: #0284c7;
+      --emerald: #059669;
+      --emerald-bg: #d1fae5;
+      --rose: #e11d48;
+      --rose-bg: #ffe4e6;
+      --amber: #d97706;
+      --amber-bg: #fef3c7;
+      --purple: #7c3aed;
+      --purple-bg: #ede9fe;
+      --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+      --shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 48px;
+    }
+
+    /* Top Header */
+    .top-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      color: #ffffff;
+      padding: 20px 28px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.14);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .brand-title h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .brand-title p {
+      font-size: 0.85rem;
+      color: #cbd5e1;
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+      border-color: #3b82f6;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .btn-glass {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+    .btn-glass:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .btn-outline {
+      background: var(--surface);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+    .btn-outline:hover {
+      background: var(--surface-alt);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.78rem;
+    }
+
+    .btn-active {
+      background: var(--primary) !important;
+      color: #ffffff !important;
+      border-color: var(--primary) !important;
+    }
+
+    /* Sticky Filter Bar */
+    .filter-bar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 12px 28px;
+    }
+
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .filter-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .filter-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+    }
+
+    select, input[type="text"], input[type="number"] {
+      padding: 6px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 600;
+      outline: none;
+    }
+    select:focus, input[type="text"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+    }
+
+    .range-slider-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-alt);
+      padding: 5px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .range-slider-wrap input[type="range"] {
+      width: 110px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    /* Collapsible School Chips Drawer */
+    .schools-drawer {
+      max-width: 1600px;
+      margin: 10px auto 0;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      display: none;
+    }
+    .schools-drawer.open {
+      display: block;
+    }
+
+    .chips-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .school-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text-muted);
+      user-select: none;
+      transition: all 0.12s;
+    }
+    .school-chip.selected {
+      background: var(--primary-light);
+      color: var(--primary);
+      border-color: #93c5fd;
+    }
+    .school-chip.suburban.selected {
+      background: var(--purple-bg);
+      color: var(--purple);
+      border-color: #c4b5fd;
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 1600px;
+      margin: 22px auto 0;
+      padding: 0 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+      gap: 16px;
+    }
+
+    .kpi-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: var(--primary);
+    }
+    .kpi-card.emerald::before { background: var(--emerald); }
+    .kpi-card.rose::before { background: var(--rose); }
+    .kpi-card.amber::before { background: var(--amber); }
+    .kpi-card.purple::before { background: var(--purple); }
+    .kpi-card.cyan::before { background: var(--accent); }
+
+    .kpi-title {
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-light);
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.15;
+    }
+
+    .kpi-sub {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 700;
+    }
+    .badge-up { background: var(--emerald-bg); color: var(--emerald); }
+    .badge-down { background: var(--rose-bg); color: var(--rose); }
+    .badge-neutral { background: var(--primary-light); color: var(--primary); }
+    .badge-purple { background: var(--purple-bg); color: var(--purple); }
+
+    /* Cards & Sections */
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      padding: 22px;
+    }
+
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title-group h2 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title-group p {
+      font-size: 0.83rem;
+      color: var(--text-light);
+      margin-top: 2px;
+    }
+
+    .card-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .grid-2col {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 1150px) {
+      .grid-2col {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .chart-box {
+      position: relative;
+      width: 100%;
+      height: 390px;
+    }
+    .chart-box-tall {
+      position: relative;
+      width: 100%;
+      height: 480px;
+    }
+
+    /* Tables & Heatmap */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #1e293b;
+      color: #ffffff;
+      font-weight: 700;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.12s;
+    }
+    th:hover {
+      background: #334155;
+    }
+    th.summary-th {
+      background: #1d4ed8;
+    }
+    th.summary-th:hover {
+      background: #1e40af;
+    }
+
+    td.sticky-col-1, th.sticky-col-1 {
+      position: sticky;
+      left: 0;
+      z-index: 12;
+      text-align: center;
+      min-width: 92px;
+    }
+    td.sticky-col-1 {
+      background: #f8fafc;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    td.sticky-col-2, th.sticky-col-2 {
+      position: sticky;
+      left: 92px;
+      z-index: 12;
+      text-align: left;
+      min-width: 245px;
+    }
+    td.sticky-col-2 {
+      background: #ffffff;
+      font-weight: 600;
+      color: var(--text);
+      box-shadow: 2px 0 5px -2px rgba(15, 23, 42, 0.08);
+    }
+    th.sticky-col-1, th.sticky-col-2 {
+      z-index: 20;
+    }
+
+    tr:hover td.sticky-col-1,
+    tr:hover td.sticky-col-2 {
+      background: #eff6ff;
+    }
+
+    tfoot td {
+      background: #dbeafe !important;
+      font-weight: 800;
+      color: #1e3a8a;
+      border-top: 2px solid #1e3a8a;
+    }
+
+    /* Comparator Tabs */
+    .tabs {
+      display: inline-flex;
+      background: var(--surface-alt);
+      padding: 4px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.83rem;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .diff-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .diff-bar {
+      height: 8px;
+      border-radius: 4px;
+      min-width: 4px;
+    }
+
+    /* Upload Modal / Dropzone Banner */
+    .drop-banner {
+      display: none;
+      background: #eff6ff;
+      border: 2px dashed #3b82f6;
+      border-radius: var(--radius);
+      padding: 18px 24px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .drop-banner.active {
+      display: block;
+    }
+
+    .legend-scale {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .legend-gradient {
+      width: 110px;
+      height: 12px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #f8fafc 0%, #93c5fd 50%, #1d4ed8 100%);
+      border: 1px solid var(--border-strong);
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-light);
+      margin-top: 12px;
+    }
+
+    /* Contextual Interactive Hints per Artifact/Chart */
+    .interactive-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-left: 4px solid #2563eb;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 14px;
+      font-size: 0.8rem;
+      color: #1e3a8a;
+      line-height: 1.45;
+    }
+    .interactive-hint strong {
+      font-weight: 700;
+      color: #1e40af;
+    }
+    .filter-hint {
+      max-width: 1600px;
+      margin: 8px auto 0;
+      padding: 6px 12px;
+      margin-bottom: 0;
+      background: #f8fafc;
+      border-color: var(--border);
+      border-left-color: var(--primary);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header class="top-header">
+    <div class="brand-title">
+      <div class="brand-icon">📊</div>
+      <div>
+        <h1>Liczba Zameldowanych Dzieci w Obwodach Szkolnych (Roczniki 2001–2026) - wg stanu na dzień 21.10.2026 r.</h1>
+        <p id="headerSubtitle">Ewidencja ludności • 17 obwodów szkolnych • Dane obejmują zameldowanych na pobyt stały i zameldowanych na pobyt czasowy</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <input type="file" id="fileUploadInput" accept=".xlsx" multiple style="display:none" />
+      <button class="btn btn-glass" id="btnExportCsv" title="Pobierz aktualnie przefiltrowaną macierz jako plik CSV (Excel)">
+        📥 Eksportuj CSV
+      </button>
+      <a class="btn btn-primary" href="zbiorczy_raport_2001_2026.xlsx" download title="Pobierz wygenerowany wieloarkuszowy plik Excel (.xlsx)">
+        📗 Pobierz Zbiorczy Excel (.xlsx)
+      </a>
+    </div>
+  </header>
+
+  <!-- STICKY FILTER BAR -->
+  <section class="filter-bar">
+    <div class="filter-row">
+      <!-- Year Range Filter -->
+      <div class="filter-group">
+        <span class="filter-label">Zakres roczników:</span>
+        <div class="range-slider-wrap">
+          <select id="yearFromSelect" title="Rocznik początkowy"></select>
+          <input type="range" id="yearFromRange" />
+          <span style="font-weight:700; color:var(--text-light);">—</span>
+          <input type="range" id="yearToRange" />
+          <select id="yearToSelect" title="Rocznik końcowy"></select>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnResetYears">Pełny zakres (2001–2026)</button>
+      </div>
+
+      <!-- Category Filter -->
+      <div class="filter-group">
+        <span class="filter-label">Kategoria obwodów:</span>
+        <div class="tabs" id="categoryTabs">
+          <button class="tab-btn active" data-cat="ALL">Wszystkie (17)</button>
+          <button class="tab-btn" data-cat="Miejskie">Szkoły miejskie SP 1–21 (15)</button>
+          <button class="tab-btn" data-cat="Podmiejskie">Chełmiec i Piątkowa (2)</button>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btnToggleSchoolsDrawer">
+          🏫 Wybierz szkoły (<span id="selectedSchoolsCount">17/17</span>) ▾
+        </button>
+      </div>
+    </div>
+
+    <div class="interactive-hint filter-hint">
+      <span>💡</span>
+      <div>
+        <strong>Jak działa pasek filtrów:</strong> Zmień <strong>zakres roczników</strong> (listami lub suwakami), przełącz <strong>kategorię obwodów</strong> lub kliknij przycisk <strong>„🏫 Wybierz szkoły”</strong>, aby włączyć/wyłączyć pojedyncze obwody. Wszystkie karty podsumowania, wykresy i tabele poniżej przeliczą się automatycznie.
+      </div>
+    </div>
+
+    <!-- Expandable Individual School Selector -->
+    <div class="schools-drawer" id="schoolsDrawer">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span style="font-size:0.8rem; font-weight:600; color:var(--text-muted);">
+          Kliknij obwód szkolny, aby włączyć lub wyłączyć go z wykresów i podsumowań:
+        </span>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-outline btn-sm" id="btnSelectAllSchools">Zaznacz wszystkie</button>
+          <button class="btn btn-outline btn-sm" id="btnInvertSchools">Odwróć wybór</button>
+        </div>
+      </div>
+      <div class="chips-container" id="schoolChipsContainer"></div>
+    </div>
+  </section>
+
+  <!-- MAIN CONTENT -->
+  <main class="container">
+
+    <div id="uploadStatusBanner" class="drop-banner"></div>
+
+    <!-- 1. KPI CARDS -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div>
+          <div class="kpi-title">Łącznie zameldowanych (wybrany zakres)</div>
+          <div class="kpi-value" id="kpiTotalValue">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge badge-neutral" id="kpiYearsBadge">26 roczników</span>
+          <span id="kpiAvgPerYear">Średnio — / rocznik</span>
+        </div>
+      </div>
+
+      <div class="kpi-card emerald">
+        <div>
+          <div class="kpi-title">Rocznik szczytowy (MAX)</div>
+          <div class="kpi-value" id="kpiPeakYear">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge badge-up" id="kpiPeakCount">— dzieci</span>
+          <span>Najliczniejszy rocznik w okresie</span>
+        </div>
+      </div>
+
+      <div class="kpi-card rose">
+        <div>
+          <div class="kpi-title">Rocznik najniższy (MIN)</div>
+          <div class="kpi-value" id="kpiLowYear">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge badge-down" id="kpiLowCount">— dzieci</span>
+          <span>Najmniej liczny rocznik w okresie</span>
+        </div>
+      </div>
+
+      <div class="kpi-card amber">
+        <div>
+          <div class="kpi-title" id="kpiTrendTitle">Zmiana demograficzna (2001 vs 2026)</div>
+          <div class="kpi-value" id="kpiTrendDiff">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge" id="kpiTrendPct">—%</span>
+          <span id="kpiTrendDesc">Porównanie skrajnych roczników</span>
+        </div>
+      </div>
+
+      <div class="kpi-card cyan">
+        <div>
+          <div class="kpi-title">Największy obwód szkolny</div>
+          <div class="kpi-value" id="kpiTopSchoolName" style="font-size:1.25rem;">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge badge-neutral" id="kpiTopSchoolVal">— dzieci</span>
+          <span id="kpiTopSchoolShare">—% udziału</span>
+        </div>
+      </div>
+
+      <div class="kpi-card purple">
+        <div>
+          <div class="kpi-title">Najmniejszy obwód szkolny</div>
+          <div class="kpi-value" id="kpiBottomSchoolName" style="font-size:1.25rem;">—</div>
+        </div>
+        <div class="kpi-sub">
+          <span class="badge badge-purple" id="kpiBottomSchoolVal">— dzieci</span>
+          <span id="kpiBottomSchoolShare">—% udziału</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. TIME SERIES TREND CHART -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <h2>📈 Liczba zameldowanych dzieci danego rocznika</h2>
+        </div>
+        <div class="card-controls">
+          <span class="filter-label">Widok wykresu:</span>
+          <div class="tabs" id="trendModeTabs">
+            <button class="tab-btn active" data-mode="total">Suma ogólna + średnia</button>
+            <button class="tab-btn" data-mode="lines">Porównanie szkół (linie)</button>
+            <button class="tab-btn" data-mode="stacked">Skumulowany warstwowy</button>
+          </div>
+        </div>
+      </div>
+      <div class="interactive-hint">
+        <span>💡</span>
+        <div>
+          <strong>Jak obsługiwać ten wykres:</strong> Przełączaj tryb widoku przyciskami po prawej stronie (<strong>Suma ogólna + średnia</strong>, <strong>Porównanie szkół</strong> lub <strong>Skumulowany warstwowy</strong>). Najedź kursorem na punkt wykresu, aby odczytać dokładną liczbę dzieci, lub kliknij nazwę szkoły w legendzie pod wykresem, aby ukryć/pokazać daną linię.
+        </div>
+      </div>
+      <div class="chart-box">
+        <canvas id="trendChartCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- 3. SCHOOL RANKING & 6. PERCENTAGE SHARES (2-COLUMN LAYOUT) -->
+    <section class="grid-2col">
+      <!-- 3. Ranking szkół -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2>🏆 Ranking i porównanie obwodów szkolnych</h2>
+            <p>Zestawienie szkół według liczby zameldowanych dzieci wraz z linią średniej</p>
+          </div>
+          <div class="card-controls">
+            <select id="rankingYearModeSelect" title="Wybierz pojedynczy rocznik lub sumę zakresu">
+              <option value="RANGE">Suma wybranego zakresu lat</option>
+            </select>
+            <select id="rankingSortSelect" title="Kolejność sortowania">
+              <option value="DESC">Sortuj: Od największej</option>
+              <option value="ASC">Sortuj: Od najmniejszej</option>
+              <option value="OBWOD">Sortuj: Wg nr obwodu (1–23)</option>
+            </select>
+          </div>
+        </div>
+        <div class="interactive-hint">
+          <span>💡</span>
+          <div>
+            <strong>Jak obsługiwać:</strong> Z pierwszej listy rozwijanej u góry wybierz <strong>sumę zakresu lat</strong> lub <strong>konkretny rocznik</strong>, a z drugiej listy zmień <strong>kolejność sortowania</strong>. Najedź na słupek, aby zobaczyć udział % oraz średnią.
+          </div>
+        </div>
+        <div class="chart-box-tall">
+          <canvas id="rankingChartCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- 6. Udziały procentowe -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <h2>🍩 Struktura i udziały procentowe obwodów</h2>
+            <p>Jaki procent wszystkich zameldowanych dzieci przypada na poszczególne szkoły</p>
+          </div>
+          <div class="card-controls">
+            <div class="tabs" id="shareModeTabs">
+              <button class="tab-btn active" data-share="doughnut">Wykres pierścieniowy (%)</button>
+              <button class="tab-btn" data-share="stacked100">Struktura 100% w latach</button>
+            </div>
+          </div>
+        </div>
+        <div class="interactive-hint">
+          <span>💡</span>
+          <div>
+            <strong>Jak obsługiwać:</strong> Przełączaj przyciski u góry między <strong>Wykresem pierścieniowym (%)</strong> a <strong>Strukturą 100% w latach</strong>. Kliknij nazwę szkoły w legendzie obok wykresu, aby tymczasowo wykluczyć ją z podziału.
+          </div>
+        </div>
+        <div class="chart-box-tall">
+          <canvas id="shareChartCanvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. DIRECT COMPARATOR: ROCZNIK VS ROCZNIK & SZKOŁA VS SZKOŁA -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <h2>⚖️ Komparator bezpośredni: „Rocznik vs Rocznik” oraz „Szkoła vs Szkoła”</h2>
+          <p>Szczegółowe porównanie zmian pomiędzy dwoma wybranymi rocznikami lub bezpośredni pojedynek wybranych szkół</p>
+        </div>
+        <div class="card-controls">
+          <div class="tabs" id="compModeTabs">
+            <button class="tab-btn active" data-comp="YEARS">Porównaj: Rocznik vs Rocznik</button>
+            <button class="tab-btn" data-comp="SCHOOLS">Porównaj: Szkoła vs Szkoła</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="interactive-hint">
+        <span>💡</span>
+        <div>
+          <strong>Jak obsługiwać komparator:</strong> Wybierz tryb przyciskami w prawym górnym rogu. W trybie <strong>„Rocznik vs Rocznik”</strong> wskaż z list dwa roczniki (lub kliknij przycisk szybkiego wyboru), aby zobaczyć różnicę liczbową i procentową w tabeli obok. W trybie <strong>„Szkoła vs Szkoła”</strong> wybierz z list od 2 do 3 szkół, aby porównać ich przebieg na wspólnym wykresie.
+        </div>
+      </div>
+
+      <!-- Sub-toolbar for Year vs Year -->
+      <div id="compYearsToolbar" style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:18px; background:var(--surface-alt); padding:12px 16px; border-radius:9px; border:1px solid var(--border);">
+        <span class="filter-label">Rocznik bazowy (A):</span>
+        <select id="compYearASelect"></select>
+        <span style="font-weight:700; color:var(--text-light);">VS</span>
+        <span class="filter-label">Rocznik porównywany (B):</span>
+        <select id="compYearBSelect"></select>
+        <button class="btn btn-outline btn-sm" id="btnPresetPeakVsLast">Szczyt (2010) vs Najnowszy (2026)</button>
+        <button class="btn btn-outline btn-sm" id="btnPresetFirstVsLast">Pierwszy (2001) vs Najnowszy (2026)</button>
+        <button class="btn btn-outline btn-sm" id="btnPresetPrevVsLast">Poprzedni (2025) vs Najnowszy (2026)</button>
+      </div>
+
+      <!-- Sub-toolbar for School vs School -->
+      <div id="compSchoolsToolbar" style="display:none; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:18px; background:var(--surface-alt); padding:12px 16px; border-radius:9px; border:1px solid var(--border);">
+        <span class="filter-label">Szkoła 1:</span>
+        <select id="compSchool1Select"></select>
+        <span class="filter-label">Szkoła 2:</span>
+        <select id="compSchool2Select"></select>
+        <span class="filter-label">Szkoła 3 (opcjonalnie):</span>
+        <select id="compSchool3Select"></select>
+      </div>
+
+      <div class="grid-2col">
+        <div class="chart-box" style="height:420px;">
+          <canvas id="comparatorChartCanvas"></canvas>
+        </div>
+        <div class="table-wrap" style="max-height:420px; overflow-y:auto;">
+          <table id="comparatorTable">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. HEATMAP MATRIX TABLE (SZKOŁY × ROCZNIKI) -->
+    <section class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <h2>🔥 Mapa ciepła (Heatmap) i pełna macierz: Szkoły × Roczniki</h2>
+          <p>Pełne zestawienie tabelaryczne z kolorowaniem natężenia liczby zameldowanych dzieci</p>
+        </div>
+        <div class="card-controls">
+          <div class="legend-scale">
+            <span>Mniej</span>
+            <div class="legend-gradient"></div>
+            <span>Więcej</span>
+          </div>
+          <select id="heatmapColorModeSelect" title="Sposób kolorowania mapy ciepła">
+            <option value="GLOBAL">Skala kolorów: Globalna (cała tabela)</option>
+            <option value="ROW">Skala kolorów: Wewnątrz wiersza (szkoły)</option>
+            <option value="COL">Skala kolorów: Wewnątrz kolumny (rocznika)</option>
+            <option value="NONE">Bez kolorowania tła</option>
+          </select>
+          <input type="text" id="matrixSearchInput" placeholder="🔍 Szukaj szkoły lub obwodu..." />
+        </div>
+      </div>
+
+      <div class="interactive-hint">
+        <span>💡</span>
+        <div>
+          <strong>Jak obsługiwać tabelę:</strong> <strong>Kliknij dowolny nagłówek kolumny</strong> (np. wybrany rocznik, <code>Obwód</code>, <code>SUMA</code>, <code>ŚREDNIA</code>, <code>MIN</code>, <code>MAX</code> lub <code>Udział %</code>), aby posortować tabelę rosnąco (▲) lub malejąco (▼). Z listy po prawej możesz zmienić sposób kolorowania tła komórek, a w polu <strong>„🔍 Szukaj szkoły...”</strong> szybko przefiltrować wiersze.
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table id="heatmapTable">
+          <thead id="heatmapThead"></thead>
+          <tbody id="heatmapTbody"></tbody>
+          <tfoot id="heatmapTfoot"></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <div class="footer-note">
+      Wygenerowano automatycznie z 26 plików ewidencji ludności (2001.xlsx – 2026.xlsx) — wg stanu na dzień 21.10.2026 r. Dane obejmują zameldowanych na pobyt stały oraz zameldowanych na pobyt czasowy.
+    </div>
+  </main>
+
+  <script>
+    // =========================================================================
+    // DANE WBUDOWANE (AUTOMATYCZNIE AKTUALIZOWANE PRZEZ generuj_raport.ps1)
+    // =========================================================================
+    /*__DATA_START__*/const INITIAL_DATA = {"generatedAt":"2026-10-21 12:30","years":[2001,2002,2003,2004,2005,2006,2007,2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024,2025,2026],"schools":[{"id":"OBWÓD 1","num":1,"name":"SZKOŁA PODSTAWOWA NR 1","shortName":"SP nr 1","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":44,"2002":40,"2003":41,"2004":46,"2005":43,"2006":52,"2007":55,"2008":70,"2009":113,"2010":82,"2011":94,"2012":46,"2013":41,"2014":46,"2015":37,"2016":52,"2017":34,"2018":34,"2019":42,"2020":40,"2021":38,"2022":39,"2023":23,"2024":19,"2025":18,"2026":28}},{"id":"OBWÓD 2","num":2,"name":"SZKOŁA PODSTAWOWA NR 2","shortName":"SP nr 2","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":42,"2002":26,"2003":33,"2004":45,"2005":47,"2006":49,"2007":46,"2008":54,"2009":44,"2010":38,"2011":48,"2012":48,"2013":44,"2014":46,"2015":47,"2016":49,"2017":57,"2018":42,"2019":39,"2020":46,"2021":32,"2022":34,"2023":26,"2024":15,"2025":17,"2026":21}},{"id":"OBWÓD 3","num":3,"name":"SZKOŁA PODSTAWOWA NR 3","shortName":"SP nr 3","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":74,"2002":72,"2003":72,"2004":79,"2005":80,"2006":75,"2007":82,"2008":85,"2009":85,"2010":112,"2011":83,"2012":73,"2013":58,"2014":65,"2015":85,"2016":78,"2017":74,"2018":61,"2019":82,"2020":62,"2021":48,"2022":47,"2023":50,"2024":37,"2025":44,"2026":20}},{"id":"OBWÓD 6","num":6,"name":"SZKOŁA PODSTAWOWA NR 6","shortName":"SP nr 6","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":13,"2002":11,"2003":16,"2004":14,"2005":14,"2006":16,"2007":17,"2008":23,"2009":18,"2010":15,"2011":17,"2012":18,"2013":20,"2014":16,"2015":17,"2016":17,"2017":19,"2018":19,"2019":16,"2020":16,"2021":16,"2022":9,"2023":8,"2024":11,"2025":11,"2026":9}},{"id":"OBWÓD 7","num":7,"name":"SZKOŁA PODSTAWOWA NR 7","shortName":"SP nr 7","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":44,"2002":40,"2003":45,"2004":47,"2005":60,"2006":46,"2007":40,"2008":54,"2009":52,"2010":66,"2011":50,"2012":36,"2013":43,"2014":39,"2015":38,"2016":36,"2017":37,"2018":33,"2019":35,"2020":42,"2021":37,"2022":21,"2023":27,"2024":17,"2025":23,"2026":22}},{"id":"OBWÓD 8","num":8,"name":"SZKOŁA PODSTAWOWA NR 8","shortName":"SP nr 8","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":48,"2002":42,"2003":46,"2004":42,"2005":71,"2006":65,"2007":69,"2008":65,"2009":77,"2010":70,"2011":75,"2012":51,"2013":64,"2014":59,"2015":51,"2016":73,"2017":51,"2018":70,"2019":44,"2020":40,"2021":49,"2022":35,"2023":38,"2024":31,"2025":27,"2026":26}},{"id":"OBWÓD 9","num":9,"name":"SZKOŁA PODSTAWOWA NR 9","shortName":"SP nr 9","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":58,"2002":46,"2003":56,"2004":53,"2005":67,"2006":52,"2007":82,"2008":80,"2009":76,"2010":80,"2011":73,"2012":75,"2013":56,"2014":63,"2015":62,"2016":70,"2017":84,"2018":69,"2019":56,"2020":68,"2021":74,"2022":45,"2023":48,"2024":51,"2025":27,"2026":26}},{"id":"OBWÓD 11","num":11,"name":"SZKOŁA PODSTAWOWA NR 11","shortName":"SP nr 11","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":23,"2002":11,"2003":14,"2004":17,"2005":18,"2006":14,"2007":14,"2008":23,"2009":24,"2010":23,"2011":19,"2012":23,"2013":17,"2014":17,"2015":22,"2016":24,"2017":19,"2018":16,"2019":13,"2020":14,"2021":17,"2022":14,"2023":13,"2024":9,"2025":12,"2026":8}},{"id":"OBWÓD 14","num":14,"name":"SZKOŁA PODSTAWOWA NR 14","shortName":"SP nr 14","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":20,"2002":12,"2003":19,"2004":15,"2005":16,"2006":18,"2007":18,"2008":29,"2009":10,"2010":16,"2011":12,"2012":28,"2013":15,"2014":11,"2015":18,"2016":14,"2017":20,"2018":13,"2019":14,"2020":17,"2021":16,"2022":8,"2023":13,"2024":14,"2025":8,"2026":6}},{"id":"OBWÓD 15","num":15,"name":"SZKOŁA PODSTAWOWA NR 15","shortName":"SP nr 15","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":32,"2002":37,"2003":43,"2004":52,"2005":46,"2006":44,"2007":43,"2008":58,"2009":51,"2010":60,"2011":38,"2012":62,"2013":54,"2014":53,"2015":55,"2016":53,"2017":51,"2018":51,"2019":45,"2020":46,"2021":40,"2022":33,"2023":37,"2024":37,"2025":37,"2026":17}},{"id":"OBWÓD 16","num":16,"name":"SZKOŁA PODSTAWOWA NR 16","shortName":"SP nr 16","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":53,"2002":58,"2003":57,"2004":53,"2005":69,"2006":58,"2007":80,"2008":75,"2009":80,"2010":81,"2011":67,"2012":77,"2013":54,"2014":68,"2015":63,"2016":77,"2017":78,"2018":68,"2019":53,"2020":70,"2021":58,"2022":47,"2023":53,"2024":34,"2025":30,"2026":37}},{"id":"OBWÓD 17","num":17,"name":"SZKOŁA PODSTAWOWA NR 17","shortName":"SP nr 17","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":36,"2002":37,"2003":44,"2004":43,"2005":48,"2006":38,"2007":40,"2008":41,"2009":40,"2010":52,"2011":39,"2012":43,"2013":51,"2014":50,"2015":41,"2016":45,"2017":54,"2018":45,"2019":49,"2020":50,"2021":46,"2022":25,"2023":38,"2024":39,"2025":26,"2026":27}},{"id":"OBWÓD 18","num":18,"name":"SZKOŁA PODSTAWOWA NR 18","shortName":"SP nr 18","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":65,"2002":63,"2003":76,"2004":57,"2005":80,"2006":81,"2007":64,"2008":89,"2009":96,"2010":91,"2011":85,"2012":83,"2013":79,"2014":80,"2015":50,"2016":68,"2017":72,"2018":69,"2019":55,"2020":62,"2021":55,"2022":46,"2023":46,"2024":31,"2025":37,"2026":23}},{"id":"OBWÓD 20","num":20,"name":"SZKOŁA PODSTAWOWA NR 20","shortName":"SP nr 20","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":44,"2002":63,"2003":45,"2004":41,"2005":48,"2006":68,"2007":44,"2008":67,"2009":61,"2010":55,"2011":54,"2012":51,"2013":52,"2014":55,"2015":50,"2016":61,"2017":68,"2018":66,"2019":51,"2020":44,"2021":44,"2022":29,"2023":30,"2024":36,"2025":26,"2026":23}},{"id":"OBWÓD 21","num":21,"name":"SZKOŁA PODSTAWOWA NR 21","shortName":"SP nr 21","category":"Szkoły miejskie (SP nr 1-21)","shortCategory":"Miejskie","values":{"2001":71,"2002":76,"2003":86,"2004":63,"2005":90,"2006":88,"2007":110,"2008":123,"2009":115,"2010":122,"2011":119,"2012":110,"2013":112,"2014":87,"2015":75,"2016":112,"2017":105,"2018":112,"2019":114,"2020":84,"2021":81,"2022":70,"2023":60,"2024":55,"2025":44,"2026":32}},{"id":"OBWÓD 22","num":22,"name":"SZKOŁA PODSTAWOWA W CHEŁMCU","shortName":"SP w Chełmcu","category":"Obwody podmiejskie (Chełmiec / Piątkowa)","shortCategory":"Podmiejskie","values":{"2001":28,"2002":25,"2003":22,"2004":21,"2005":30,"2006":22,"2007":33,"2008":28,"2009":28,"2010":42,"2011":31,"2012":25,"2013":24,"2014":40,"2015":25,"2016":25,"2017":27,"2018":25,"2019":33,"2020":27,"2021":33,"2022":18,"2023":14,"2024":18,"2025":15,"2026":14}},{"id":"OBWÓD 23","num":23,"name":"SZKOŁA PODSTAWOWA W PIĄTKOWEJ","shortName":"SP w Piątkowej","category":"Obwody podmiejskie (Chełmiec / Piątkowa)","shortCategory":"Podmiejskie","values":{"2001":20,"2002":17,"2003":20,"2004":15,"2005":14,"2006":19,"2007":23,"2008":29,"2009":20,"2010":31,"2011":20,"2012":24,"2013":16,"2014":19,"2015":22,"2016":18,"2017":17,"2018":18,"2019":17,"2020":23,"2021":13,"2022":21,"2023":18,"2024":17,"2025":14,"2026":16}}]};/*__DATA_END__*/
+
+    // Paleta czytelnych, kontrastowych kolorów dla 17 szkół
+    const SCHOOL_PALETTE = [
+      '#1d4ed8', '#0284c7', '#059669', '#d97706', '#e11d48', '#7c3aed',
+      '#2563eb', '#0d9488', '#65a30d', '#ea580c', '#db2777', '#9333ea',
+      '#3b82f6', '#0891b2', '#16a34a', '#ca8a04', '#dc2626'
+    ];
+
+    // Stan aplikacji
+    const state = {
+      years: [],
+      schools: [],
+      yearFrom: 2001,
+      yearTo: 2026,
+      categoryFilter: 'ALL', // 'ALL' | 'Miejskie' | 'Podmiejskie'
+      selectedSchoolIds: new Set(),
+      trendMode: 'total',     // 'total' | 'lines' | 'stacked'
+      rankingYearMode: 'RANGE', // 'RANGE' or specific year string
+      rankingSort: 'DESC',    // 'DESC' | 'ASC' | 'OBWOD'
+      shareMode: 'doughnut',  // 'doughnut' | 'stacked100'
+      compMode: 'YEARS',      // 'YEARS' | 'SCHOOLS'
+      compYearA: 2010,
+      compYearB: 2026,
+      compSchool1: 'OBWÓD 21',
+      compSchool2: 'OBWÓD 16',
+      compSchool3: 'OBWÓD 3',
+      heatmapColorMode: 'GLOBAL',
+      matrixSearch: '',
+      matrixSortCol: 'OBWOD', // 'OBWOD' | 'NAME' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'SHARE' | year number
+      matrixSortDir: 'ASC'
+    };
+
+    let trendChart = null;
+    let rankingChart = null;
+    let shareChart = null;
+    let comparatorChart = null;
+
+    function formatNumber(n) {
+      return Number(n || 0).toLocaleString('pl-PL');
+    }
+
+    function formatDecimal(n, digits = 1) {
+      return Number(n || 0).toLocaleString('pl-PL', {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+      });
+    }
+
+    function initData(payload) {
+      state.years = [...payload.years].map(Number).sort((a, b) => a - b);
+      state.schools = payload.schools.map((s, idx) => ({
+        ...s,
+        color: SCHOOL_PALETTE[idx % SCHOOL_PALETTE.length]
+      }));
+      if (state.years.length > 0) {
+        state.yearFrom = state.years[0];
+        state.yearTo = state.years[state.years.length - 1];
+        state.compYearA = state.years.includes(2010) ? 2010 : state.years[0];
+        state.compYearB = state.years[state.years.length - 1];
+      }
+      state.selectedSchoolIds = new Set(state.schools.map(s => s.id));
+      if (state.schools.length >= 2) {
+        state.compSchool1 = state.schools[0].id;
+        state.compSchool2 = state.schools[Math.min(1, state.schools.length - 1)].id;
+        state.compSchool3 = '';
+      }
+
+      populateControls();
+      renderAll();
+    }
+
+    function populateControls() {
+      const yFromSel = document.getElementById('yearFromSelect');
+      const yToSel = document.getElementById('yearToSelect');
+      const yFromRange = document.getElementById('yearFromRange');
+      const yToRange = document.getElementById('yearToRange');
+      const rankYearSel = document.getElementById('rankingYearModeSelect');
+      const compASel = document.getElementById('compYearASelect');
+      const compBSel = document.getElementById('compYearBSelect');
+
+      const minY = state.years[0] || 2001;
+      const maxY = state.years[state.years.length - 1] || 2026;
+
+      yFromRange.min = minY;
+      yFromRange.max = maxY;
+      yFromRange.value = state.yearFrom;
+
+      yToRange.min = minY;
+      yToRange.max = maxY;
+      yToRange.value = state.yearTo;
+
+      yFromSel.innerHTML = state.years.map(y => `<option value="${y}">${y}</option>`).join('');
+      yToSel.innerHTML = state.years.map(y => `<option value="${y}">${y}</option>`).join('');
+      yFromSel.value = state.yearFrom;
+      yToSel.value = state.yearTo;
+
+      rankYearSel.innerHTML = `<option value="RANGE">Suma wybranego zakresu lat (${state.yearFrom}–${state.yearTo})</option>` +
+        state.years.slice().reverse().map(y => `<option value="${y}">Tylko rocznik ${y}</option>`).join('');
+      rankYearSel.value = state.rankingYearMode;
+
+      compASel.innerHTML = state.years.map(y => `<option value="${y}">Rocznik ${y}</option>`).join('');
+      compBSel.innerHTML = state.years.map(y => `<option value="${y}">Rocznik ${y}</option>`).join('');
+      compASel.value = state.compYearA;
+      compBSel.value = state.compYearB;
+
+      // Szkoły w komparatorze
+      const s1Sel = document.getElementById('compSchool1Select');
+      const s2Sel = document.getElementById('compSchool2Select');
+      const s3Sel = document.getElementById('compSchool3Select');
+      const schoolOpts = state.schools.map(s => `<option value="${s.id}">${s.name} (${s.id})</option>`).join('');
+      s1Sel.innerHTML = schoolOpts;
+      s2Sel.innerHTML = schoolOpts;
+      s3Sel.innerHTML = `<option value="">— Brak trzeciej szkoły —</option>` + schoolOpts;
+
+      // Domyślnie wybierz 2 największe szkoły do komparatora
+      const sortedBySum = [...state.schools].sort((a, b) => {
+        const sumA = Object.values(a.values).reduce((acc, v) => acc + Number(v || 0), 0);
+        const sumB = Object.values(b.values).reduce((acc, v) => acc + Number(v || 0), 0);
+        return sumB - sumA;
+      });
+      if (sortedBySum.length >= 2) {
+        state.compSchool1 = sortedBySum[0].id;
+        state.compSchool2 = sortedBySum[1].id;
+      }
+      s1Sel.value = state.compSchool1;
+      s2Sel.value = state.compSchool2;
+      s3Sel.value = state.compSchool3;
+
+      renderSchoolChips();
+    }
+
+    function renderSchoolChips() {
+      const container = document.getElementById('schoolChipsContainer');
+      container.innerHTML = state.schools.map(s => {
+        const isSel = state.selectedSchoolIds.has(s.id);
+        const subClass = s.shortCategory === 'Podmiejskie' ? 'suburban' : '';
+        return `<div class="school-chip ${subClass} ${isSel ? 'selected' : ''}" data-id="${s.id}">
+          <span>${isSel ? '✓' : '+'}</span>
+          <span>${s.shortName}</span>
+          <span style="opacity:0.7; font-size:0.72rem;">(${s.id.replace('OBWÓD ', 'Obw. ')})</span>
+        </div>`;
+      }).join('');
+
+      document.getElementById('selectedSchoolsCount').textContent = `${state.selectedSchoolIds.size}/${state.schools.length}`;
+
+      container.querySelectorAll('.school-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          const id = chip.getAttribute('data-id');
+          if (state.selectedSchoolIds.has(id)) {
+            if (state.selectedSchoolIds.size > 1) {
+              state.selectedSchoolIds.delete(id);
+            }
+          } else {
+            state.selectedSchoolIds.add(id);
+          }
+          // Wyczyść podświetlenie kategorii na custom
+          document.querySelectorAll('#categoryTabs .tab-btn').forEach(b => b.classList.remove('active'));
+          renderSchoolChips();
+          renderAll();
+        });
+      });
+    }
+
+    function getActiveYears() {
+      return state.years.filter(y => y >= state.yearFrom && y <= state.yearTo);
+    }
+
+    function getActiveSchools() {
+      return state.schools.filter(s => state.selectedSchoolIds.has(s.id));
+    }
+
+    function getVal(school, year) {
+      return Number(school.values[String(year)] || 0);
+    }
+
+    function getSchoolSum(school, years) {
+      return years.reduce((acc, y) => acc + getVal(school, y), 0);
+    }
+
+    function getYearSum(year, schools) {
+      return schools.reduce((acc, s) => acc + getVal(s, year), 0);
+    }
+
+    // =========================================================================
+    // GŁÓWNA FUNKCJA RENDERUJĄCA WSZYSTKIE 6 WIDOKÓW
+    // =========================================================================
+    function renderAll() {
+      const activeYears = getActiveYears();
+      const activeSchools = getActiveSchools();
+
+      // Update range label in ranking dropdown
+      const rankOpt0 = document.querySelector('#rankingYearModeSelect option[value="RANGE"]');
+      if (rankOpt0) {
+        rankOpt0.textContent = `Suma wybranego zakresu lat (${state.yearFrom}–${state.yearTo})`;
+      }
+
+      renderKPIs(activeYears, activeSchools);
+      renderTrendChart(activeYears, activeSchools);
+      renderRankingChart(activeYears, activeSchools);
+      renderShareChart(activeYears, activeSchools);
+      renderComparator(activeYears, activeSchools);
+      renderHeatmapTable(activeYears, activeSchools);
+    }
+
+    // 1. RENDEROWANIE KART KPI
+    function renderKPIs(activeYears, activeSchools) {
+      const yearTotals = activeYears.map(y => ({
+        year: y,
+        total: getYearSum(y, activeSchools)
+      }));
+
+      const grandTotal = yearTotals.reduce((acc, item) => acc + item.total, 0);
+      const avgPerYear = activeYears.length > 0 ? grandTotal / activeYears.length : 0;
+
+      document.getElementById('kpiTotalValue').textContent = formatNumber(grandTotal);
+      document.getElementById('kpiYearsBadge').textContent = `${activeYears.length} roczników (${state.yearFrom}–${state.yearTo})`;
+      document.getElementById('kpiAvgPerYear').textContent = `Średnio ${formatDecimal(avgPerYear, 1)} / rocznik`;
+
+      if (yearTotals.length > 0) {
+        const sortedYearsDesc = [...yearTotals].sort((a, b) => b.total - a.total);
+        const peak = sortedYearsDesc[0];
+        const low = sortedYearsDesc[sortedYearsDesc.length - 1];
+
+        document.getElementById('kpiPeakYear').textContent = `Rocznik ${peak.year}`;
+        document.getElementById('kpiPeakCount').textContent = `${formatNumber(peak.total)} zameldowanych`;
+
+        document.getElementById('kpiLowYear').textContent = `Rocznik ${low.year}`;
+        document.getElementById('kpiLowCount').textContent = `${formatNumber(low.total)} zameldowanych`;
+
+        const firstY = yearTotals[0];
+        const lastY = yearTotals[yearTotals.length - 1];
+        const diff = lastY.total - firstY.total;
+        const pct = firstY.total > 0 ? ((diff / firstY.total) * 100) : 0;
+        const sign = diff > 0 ? '+' : '';
+
+        document.getElementById('kpiTrendTitle').textContent = `Zmiana (${firstY.year} vs ${lastY.year})`;
+        document.getElementById('kpiTrendDiff').textContent = `${sign}${formatNumber(diff)} osób`;
+        const pctEl = document.getElementById('kpiTrendPct');
+        pctEl.textContent = `${sign}${formatDecimal(pct, 1)}%`;
+        pctEl.className = `badge ${diff >= 0 ? 'badge-up' : 'badge-down'}`;
+        document.getElementById('kpiTrendDesc').textContent = `Z ${formatNumber(firstY.total)} (${firstY.year}) do ${formatNumber(lastY.total)} (${lastY.year})`;
+      }
+
+      if (activeSchools.length > 0) {
+        const schoolTotals = activeSchools.map(s => ({
+          school: s,
+          total: getSchoolSum(s, activeYears)
+        })).sort((a, b) => b.total - a.total);
+
+        const topS = schoolTotals[0];
+        const botS = schoolTotals[schoolTotals.length - 1];
+        const topShare = grandTotal > 0 ? (topS.total / grandTotal) * 100 : 0;
+        const botShare = grandTotal > 0 ? (botS.total / grandTotal) * 100 : 0;
+
+        document.getElementById('kpiTopSchoolName').textContent = `${topS.school.shortName} (${topS.school.id})`;
+        document.getElementById('kpiTopSchoolVal').textContent = `${formatNumber(topS.total)} dzieci`;
+        document.getElementById('kpiTopSchoolShare').textContent = `${formatDecimal(topShare, 1)}% udziału`;
+
+        document.getElementById('kpiBottomSchoolName').textContent = `${botS.school.shortName} (${botS.school.id})`;
+        document.getElementById('kpiBottomSchoolVal').textContent = `${formatNumber(botS.total)} dzieci`;
+        document.getElementById('kpiBottomSchoolShare').textContent = `${formatDecimal(botShare, 1)}% udziału`;
+      }
+    }
+
+    // 2. WYKRES TRENDU W CZASIE
+    function renderTrendChart(activeYears, activeSchools) {
+      const ctx = document.getElementById('trendChartCanvas').getContext('2d');
+      if (trendChart) trendChart.destroy();
+
+      const labels = activeYears.map(String);
+      let datasets = [];
+
+      if (state.trendMode === 'total') {
+        const totals = activeYears.map(y => getYearSum(y, activeSchools));
+        const avg = totals.length > 0 ? totals.reduce((a, b) => a + b, 0) / totals.length : 0;
+        const avgLine = activeYears.map(() => Math.round(avg * 10) / 10);
+
+        datasets = [
+          {
+            label: 'Łączna liczba zameldowanych dzieci',
+            data: totals,
+            borderColor: '#1d4ed8',
+            backgroundColor: 'rgba(29, 78, 216, 0.14)',
+            borderWidth: 3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#1d4ed8',
+            fill: true,
+            tension: 0.25
+          },
+          {
+            label: `Średnia wieloletnia (${formatDecimal(avg, 1)})`,
+            data: avgLine,
+            borderColor: '#d97706',
+            borderDash: [6, 6],
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false
+          }
+        ];
+      } else {
+        const isStacked = state.trendMode === 'stacked';
+        datasets = activeSchools.map(s => ({
+          label: `${s.shortName} (${s.id})`,
+          data: activeYears.map(y => getVal(s, y)),
+          borderColor: s.color,
+          backgroundColor: isStacked ? s.color + 'cc' : s.color + '22',
+          borderWidth: isStacked ? 1.2 : 2.2,
+          pointRadius: isStacked ? 1.5 : 3,
+          fill: isStacked,
+          tension: 0.25
+        }));
+      }
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { boxWidth: 12, font: { size: 11 } }
+            },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${formatNumber(ctx.parsed.y)} osób`
+              }
+            }
+          },
+          scales: {
+            x: {
+              title: { display: true, text: 'Rocznik urodzenia', font: { weight: 'bold' } }
+            },
+            y: {
+              stacked: state.trendMode === 'stacked',
+              beginAtZero: true,
+              title: { display: true, text: 'Liczba zameldowanych dzieci', font: { weight: 'bold' } }
+            }
+          }
+        }
+      });
+    }
+
+    // 3. RANKING I PORÓWNANIE SZKÓŁ
+    function renderRankingChart(activeYears, activeSchools) {
+      const ctx = document.getElementById('rankingChartCanvas').getContext('2d');
+      if (rankingChart) rankingChart.destroy();
+
+      const targetYears = state.rankingYearMode === 'RANGE'
+        ? activeYears
+        : [Number(state.rankingYearMode)];
+
+      let items = activeSchools.map(s => ({
+        school: s,
+        val: getSchoolSum(s, targetYears)
+      }));
+
+      if (state.rankingSort === 'DESC') {
+        items.sort((a, b) => b.val - a.val);
+      } else if (state.rankingSort === 'ASC') {
+        items.sort((a, b) => a.val - b.val);
+      } else {
+        items.sort((a, b) => a.school.num - b.school.num);
+      }
+
+      const totalAll = items.reduce((acc, i) => acc + i.val, 0);
+      const avgSchool = items.length > 0 ? totalAll / items.length : 0;
+
+      const labels = items.map(i => `${i.school.shortName} (${i.school.id})`);
+      const values = items.map(i => i.val);
+      const bgColors = items.map(i => i.school.shortCategory === 'Podmiejskie' ? '#7c3aed' : '#1d4ed8');
+
+      rankingChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: state.rankingYearMode === 'RANGE'
+                ? `Suma zameldowanych (${state.yearFrom}–${state.yearTo})`
+                : `Liczba zameldowanych (rocznik ${state.rankingYearMode})`,
+              data: values,
+              backgroundColor: bgColors,
+              borderRadius: 5
+            }
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: (c) => {
+                  const v = c.parsed.x;
+                  const pct = totalAll > 0 ? ((v / totalAll) * 100).toFixed(1) : '0.0';
+                  return `${formatNumber(v)} dzieci (${pct}% ogółu, średnia na obwód: ${formatDecimal(avgSchool, 1)})`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              title: { display: true, text: 'Liczba zameldowanych dzieci', font: { weight: 'bold' } }
+            }
+          }
+        }
+      });
+    }
+
+    // 6. WYKRES UDZIAŁÓW PROCENTOWYCH
+    function renderShareChart(activeYears, activeSchools) {
+      const ctx = document.getElementById('shareChartCanvas').getContext('2d');
+      if (shareChart) shareChart.destroy();
+
+      if (state.shareMode === 'doughnut') {
+        const items = activeSchools.map(s => ({
+          school: s,
+          val: getSchoolSum(s, activeYears)
+        })).sort((a, b) => b.val - a.val);
+
+        const totalAll = items.reduce((acc, i) => acc + i.val, 0);
+
+        shareChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: items.map(i => {
+              const pct = totalAll > 0 ? ((i.val / totalAll) * 100).toFixed(1) : '0.0';
+              return `${i.school.shortName} (${pct}%)`;
+            }),
+            datasets: [{
+              data: items.map(i => i.val),
+              backgroundColor: items.map(i => i.school.color),
+              borderWidth: 1.5,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '55%',
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: { boxWidth: 12, font: { size: 11 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (c) => {
+                    const v = c.parsed;
+                    const pct = totalAll > 0 ? ((v / totalAll) * 100).toFixed(2) : '0.00';
+                    return `${c.label}: ${formatNumber(v)} dzieci (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      } else {
+        // 100% Skumulowany w latach
+        const yearSums = {};
+        activeYears.forEach(y => {
+          yearSums[y] = getYearSum(y, activeSchools);
+        });
+
+        const datasets = activeSchools.map(s => ({
+          label: s.shortName,
+          data: activeYears.map(y => {
+            const ys = yearSums[y];
+            return ys > 0 ? Number(((getVal(s, y) / ys) * 100).toFixed(2)) : 0;
+          }),
+          backgroundColor: s.color
+        }));
+
+        shareChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: activeYears.map(String),
+            datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { boxWidth: 10, font: { size: 10 } }
+              },
+              tooltip: {
+                callbacks: {
+                  label: (c) => `${c.dataset.label}: ${formatDecimal(c.parsed.y, 2)}%`
+                }
+              }
+            },
+            scales: {
+              x: { stacked: true },
+              y: {
+                stacked: true,
+                min: 0,
+                max: 100,
+                title: { display: true, text: 'Udział procentowy w roczniku (%)', font: { weight: 'bold' } }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // 4. KOMPARATOR: ROCZNIK VS ROCZNIK ORAZ SZKOŁA VS SZKOŁA
+    function renderComparator(activeYears, activeSchools) {
+      const ctx = document.getElementById('comparatorChartCanvas').getContext('2d');
+      if (comparatorChart) comparatorChart.destroy();
+
+      const table = document.getElementById('comparatorTable');
+      const thead = table.querySelector('thead');
+      const tbody = table.querySelector('tbody');
+      const tfoot = table.querySelector('tfoot');
+
+      if (state.compMode === 'YEARS') {
+        const yA = Number(state.compYearA);
+        const yB = Number(state.compYearB);
+
+        const rows = activeSchools.map(s => {
+          const vA = getVal(s, yA);
+          const vB = getVal(s, yB);
+          const diff = vB - vA;
+          const pct = vA > 0 ? ((diff / vA) * 100) : (vB > 0 ? 100 : 0);
+          return { school: s, vA, vB, diff, pct };
+        });
+
+        comparatorChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: rows.map(r => r.school.shortName),
+            datasets: [
+              {
+                label: `Rocznik ${yA}`,
+                data: rows.map(r => r.vA),
+                backgroundColor: '#93c5fd',
+                borderColor: '#2563eb',
+                borderWidth: 1,
+                borderRadius: 4
+              },
+              {
+                label: `Rocznik ${yB}`,
+                data: rows.map(r => r.vB),
+                backgroundColor: '#1d4ed8',
+                borderRadius: 4
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom' }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Liczba zameldowanych dzieci', font: { weight: 'bold' } }
+              }
+            }
+          }
+        });
+
+        const maxAbsDiff = Math.max(1, ...rows.map(r => Math.abs(r.diff)));
+        thead.innerHTML = `<tr>
+          <th style="text-align:left;">Szkoła (Obwód)</th>
+          <th>Rocznik ${yA}</th>
+          <th>Rocznik ${yB}</th>
+          <th>Różnica (${yB} - ${yA})</th>
+          <th>Zmiana %</th>
+        </tr>`;
+
+        tbody.innerHTML = rows.map(r => {
+          const sign = r.diff > 0 ? '+' : '';
+          const badgeCls = r.diff > 0 ? 'badge-up' : (r.diff < 0 ? 'badge-down' : 'badge-neutral');
+          const barColor = r.diff >= 0 ? '#059669' : '#e11d48';
+          const barW = Math.round((Math.abs(r.diff) / maxAbsDiff) * 55);
+          return `<tr>
+            <td style="text-align:left; font-weight:600;">${r.school.name} <span style="color:var(--text-light); font-size:0.75rem;">(${r.school.id})</span></td>
+            <td>${formatNumber(r.vA)}</td>
+            <td style="font-weight:700;">${formatNumber(r.vB)}</td>
+            <td>
+              <div class="diff-bar-wrap">
+                <span style="font-weight:700; color:${barColor};">${sign}${formatNumber(r.diff)}</span>
+                <div class="diff-bar" style="width:${barW}px; background:${barColor};"></div>
+              </div>
+            </td>
+            <td><span class="badge ${badgeCls}">${sign}${formatDecimal(r.pct, 1)}%</span></td>
+          </tr>`;
+        }).join('');
+
+        const sumA = rows.reduce((a, r) => a + r.vA, 0);
+        const sumB = rows.reduce((a, r) => a + r.vB, 0);
+        const sumDiff = sumB - sumA;
+        const sumPct = sumA > 0 ? ((sumDiff / sumA) * 100) : 0;
+        const sumSign = sumDiff > 0 ? '+' : '';
+
+        tfoot.innerHTML = `<tr>
+          <td style="text-align:left;">SUMA WYBRANYCH SZKÓŁ</td>
+          <td>${formatNumber(sumA)}</td>
+          <td>${formatNumber(sumB)}</td>
+          <td>${sumSign}${formatNumber(sumDiff)}</td>
+          <td>${sumSign}${formatDecimal(sumPct, 1)}%</td>
+        </tr>`;
+
+      } else {
+        // Tryb SZKOŁA VS SZKOŁA
+        const chosenIds = [state.compSchool1, state.compSchool2, state.compSchool3].filter(Boolean);
+        const chosenSchools = chosenIds.map(id => state.schools.find(s => s.id === id)).filter(Boolean);
+        const palette = ['#1d4ed8', '#e11d48', '#059669'];
+
+        comparatorChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: activeYears.map(String),
+            datasets: chosenSchools.map((s, idx) => ({
+              label: `${s.shortName} (${s.id})`,
+              data: activeYears.map(y => getVal(s, y)),
+              borderColor: palette[idx % palette.length],
+              backgroundColor: palette[idx % palette.length] + '22',
+              borderWidth: 2.8,
+              pointRadius: 4,
+              tension: 0.25,
+              fill: false
+            }))
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+              y: {
+                beginAtZero: true,
+                title: { display: true, text: 'Liczba zameldowanych dzieci', font: { weight: 'bold' } }
+              }
+            }
+          }
+        });
+
+        const s1 = chosenSchools[0];
+        const s2 = chosenSchools[1];
+        const s3 = chosenSchools[2];
+
+        thead.innerHTML = `<tr>
+          <th style="text-align:center;">Rocznik</th>
+          ${chosenSchools.map(s => `<th>${s.shortName}</th>`).join('')}
+          ${s1 && s2 ? `<th>Różnica (${s1.shortName} - ${s2.shortName})</th>` : ''}
+        </tr>`;
+
+        tbody.innerHTML = activeYears.map(y => {
+          const v1 = s1 ? getVal(s1, y) : 0;
+          const v2 = s2 ? getVal(s2, y) : 0;
+          const diff = v1 - v2;
+          const sign = diff > 0 ? '+' : '';
+          const col = diff > 0 ? '#1d4ed8' : (diff < 0 ? '#e11d48' : '#64748b');
+          return `<tr>
+            <td style="text-align:center; font-weight:700;">${y}</td>
+            ${chosenSchools.map(s => `<td>${formatNumber(getVal(s, y))}</td>`).join('')}
+            ${s1 && s2 ? `<td style="font-weight:700; color:${col};">${sign}${formatNumber(diff)}</td>` : ''}
+          </tr>`;
+        }).join('');
+
+        const totals = chosenSchools.map(s => getSchoolSum(s, activeYears));
+        const totalDiff = (totals[0] || 0) - (totals[1] || 0);
+        const tSign = totalDiff > 0 ? '+' : '';
+        tfoot.innerHTML = `<tr>
+          <td style="text-align:center;">SUMA (${state.yearFrom}–${state.yearTo})</td>
+          ${totals.map(t => `<td>${formatNumber(t)}</td>`).join('')}
+          ${s1 && s2 ? `<td>${tSign}${formatNumber(totalDiff)}</td>` : ''}
+        </tr>`;
+      }
+    }
+
+    // 5. MAPA CIEPŁA (HEATMAP) I TABELA MACIERZOWA
+    function getHeatmapCellStyle(val, minV, maxV) {
+      if (state.heatmapColorMode === 'NONE' || maxV <= minV) {
+        return '';
+      }
+      const ratio = Math.max(0, Math.min(1, (val - minV) / (maxV - minV)));
+      // Interpolacja od jasnego błękitu (#f8fafc) przez błękit (#93c5fd) do ciemnego granatu (#1d4ed8)
+      const r = Math.round(248 - ratio * (248 - 29));
+      const g = Math.round(250 - ratio * (250 - 78));
+      const b = Math.round(252 - ratio * (252 - 216));
+      const textColor = ratio > 0.62 ? '#ffffff' : '#0f172a';
+      const fontWeight = ratio > 0.5 ? '700' : '500';
+      return `background-color: rgb(${r}, ${g}, ${b}); color: ${textColor}; font-weight: ${fontWeight};`;
+    }
+
+    function renderHeatmapTable(activeYears, activeSchools) {
+      const thead = document.getElementById('heatmapThead');
+      const tbody = document.getElementById('heatmapTbody');
+      const tfoot = document.getElementById('heatmapTfoot');
+
+      const searchQ = state.matrixSearch.trim().toLowerCase();
+      let filteredSchools = activeSchools.filter(s => {
+        if (!searchQ) return true;
+        return s.name.toLowerCase().includes(searchQ) ||
+               s.shortName.toLowerCase().includes(searchQ) ||
+               s.id.toLowerCase().includes(searchQ);
+      });
+
+      const yearTotals = {};
+      const yearMin = {};
+      const yearMax = {};
+      let globalMin = Infinity;
+      let globalMax = -Infinity;
+
+      activeYears.forEach(y => {
+        const vals = filteredSchools.map(s => getVal(s, y));
+        yearTotals[y] = vals.reduce((a, b) => a + b, 0);
+        yearMin[y] = vals.length ? Math.min(...vals) : 0;
+        yearMax[y] = vals.length ? Math.max(...vals) : 0;
+        vals.forEach(v => {
+          if (v < globalMin) globalMin = v;
+          if (v > globalMax) globalMax = v;
+        });
+      });
+      if (globalMin === Infinity) { globalMin = 0; globalMax = 0; }
+
+      const grandTotal = Object.values(yearTotals).reduce((a, b) => a + b, 0);
+
+      let rowModels = filteredSchools.map(s => {
+        const vals = activeYears.map(y => getVal(s, y));
+        const sum = vals.reduce((a, b) => a + b, 0);
+        const avg = vals.length ? sum / vals.length : 0;
+        const min = vals.length ? Math.min(...vals) : 0;
+        const max = vals.length ? Math.max(...vals) : 0;
+        const share = grandTotal > 0 ? (sum / grandTotal) * 100 : 0;
+        return { school: s, vals, sum, avg, min, max, share };
+      });
+
+      // Sortowanie wierszy macierzy
+      const dir = state.matrixSortDir === 'ASC' ? 1 : -1;
+      rowModels.sort((a, b) => {
+        const col = state.matrixSortCol;
+        if (col === 'OBWOD') return (a.school.num - b.school.num) * dir;
+        if (col === 'NAME') return a.school.name.localeCompare(b.school.name, 'pl') * dir;
+        if (col === 'SUM') return (a.sum - b.sum) * dir;
+        if (col === 'AVG') return (a.avg - b.avg) * dir;
+        if (col === 'MIN') return (a.min - b.min) * dir;
+        if (col === 'MAX') return (a.max - b.max) * dir;
+        if (col === 'SHARE') return (a.share - b.share) * dir;
+        const yNum = Number(col);
+        if (!isNaN(yNum)) {
+          return (getVal(a.school, yNum) - getVal(b.school, yNum)) * dir;
+        }
+        return 0;
+      });
+
+      const sortIndicator = (colKey) => {
+        if (String(state.matrixSortCol) !== String(colKey)) return '';
+        return state.matrixSortDir === 'ASC' ? ' ▲' : ' ▼';
+      };
+
+      thead.innerHTML = `<tr>
+        <th class="sticky-col-1" data-sort="OBWOD">Obwód${sortIndicator('OBWOD')}</th>
+        <th class="sticky-col-2" data-sort="NAME">Szkoła (siedziba)${sortIndicator('NAME')}</th>
+        ${activeYears.map(y => `<th data-sort="${y}">${y}${sortIndicator(y)}</th>`).join('')}
+        <th class="summary-th" data-sort="SUM">SUMA${sortIndicator('SUM')}</th>
+        <th class="summary-th" data-sort="AVG">ŚREDNIA${sortIndicator('AVG')}</th>
+        <th class="summary-th" data-sort="MIN">MIN${sortIndicator('MIN')}</th>
+        <th class="summary-th" data-sort="MAX">MAX${sortIndicator('MAX')}</th>
+        <th class="summary-th" data-sort="SHARE">Udział %${sortIndicator('SHARE')}</th>
+      </tr>`;
+
+      tbody.innerHTML = rowModels.map(r => {
+        const cellsHtml = activeYears.map(y => {
+          const v = getVal(r.school, y);
+          let minV = globalMin, maxV = globalMax;
+          if (state.heatmapColorMode === 'ROW') {
+            minV = r.min; maxV = r.max;
+          } else if (state.heatmapColorMode === 'COL') {
+            minV = yearMin[y]; maxV = yearMax[y];
+          }
+          const style = getHeatmapCellStyle(v, minV, maxV);
+          return `<td style="${style}" title="${r.school.name} • Rocznik ${y}: ${v} dzieci">${formatNumber(v)}</td>`;
+        }).join('');
+
+        return `<tr>
+          <td class="sticky-col-1">${r.school.id}</td>
+          <td class="sticky-col-2">${r.school.name}</td>
+          ${cellsHtml}
+          <td style="font-weight:800; background:#eff6ff; color:#1e3a8a;">${formatNumber(r.sum)}</td>
+          <td style="background:#f8fafc;">${formatDecimal(r.avg, 1)}</td>
+          <td style="background:#f8fafc;">${formatNumber(r.min)}</td>
+          <td style="background:#f8fafc;">${formatNumber(r.max)}</td>
+          <td style="font-weight:700; background:#f8fafc;">${formatDecimal(r.share, 2)}%</td>
+        </tr>`;
+      }).join('');
+
+      const yearTotalsArr = activeYears.map(y => yearTotals[y]);
+      const footerAvg = yearTotalsArr.length ? grandTotal / yearTotalsArr.length : 0;
+      const footerMin = yearTotalsArr.length ? Math.min(...yearTotalsArr) : 0;
+      const footerMax = yearTotalsArr.length ? Math.max(...yearTotalsArr) : 0;
+
+      tfoot.innerHTML = `<tr>
+        <td class="sticky-col-1">SUMA</td>
+        <td class="sticky-col-2">RAZEM (${rowModels.length} obwodów)</td>
+        ${activeYears.map(y => `<td>${formatNumber(yearTotals[y])}</td>`).join('')}
+        <td>${formatNumber(grandTotal)}</td>
+        <td>${formatDecimal(footerAvg, 1)}</td>
+        <td>${formatNumber(footerMin)}</td>
+        <td>${formatNumber(footerMax)}</td>
+        <td>100,00%</td>
+      </tr>`;
+
+      thead.querySelectorAll('th[data-sort]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.getAttribute('data-sort');
+          if (String(state.matrixSortCol) === String(col)) {
+            state.matrixSortDir = state.matrixSortDir === 'ASC' ? 'DESC' : 'ASC';
+          } else {
+            state.matrixSortCol = col;
+            state.matrixSortDir = (col === 'OBWOD' || col === 'NAME') ? 'ASC' : 'DESC';
+          }
+          renderHeatmapTable(getActiveYears(), getActiveSchools());
+        });
+      });
+    }
+
+    // =========================================================================
+    // OBSŁUGA ZDARZEŃ INTERFEJSU I FILTRÓW
+    // =========================================================================
+    function bindEvents() {
+      const yFromSel = document.getElementById('yearFromSelect');
+      const yToSel = document.getElementById('yearToSelect');
+      const yFromRange = document.getElementById('yearFromRange');
+      const yToRange = document.getElementById('yearToRange');
+
+      function syncYears(fromVal, toVal) {
+        let f = Number(fromVal);
+        let t = Number(toVal);
+        if (f > t) {
+          const tmp = f; f = t; t = tmp;
+        }
+        state.yearFrom = f;
+        state.yearTo = t;
+        yFromSel.value = f;
+        yToSel.value = t;
+        yFromRange.value = f;
+        yToRange.value = t;
+        renderAll();
+      }
+
+      yFromSel.addEventListener('change', () => syncYears(yFromSel.value, yToSel.value));
+      yToSel.addEventListener('change', () => syncYears(yFromSel.value, yToSel.value));
+      yFromRange.addEventListener('input', () => syncYears(yFromRange.value, yToRange.value));
+      yToRange.addEventListener('input', () => syncYears(yFromRange.value, yToRange.value));
+
+      document.getElementById('btnResetYears').addEventListener('click', () => {
+        syncYears(state.years[0], state.years[state.years.length - 1]);
+      });
+
+      // Kategorie obwodów
+      document.querySelectorAll('#categoryTabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#categoryTabs .tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          const cat = btn.getAttribute('data-cat');
+          state.categoryFilter = cat;
+          if (cat === 'ALL') {
+            state.selectedSchoolIds = new Set(state.schools.map(s => s.id));
+          } else {
+            state.selectedSchoolIds = new Set(
+              state.schools.filter(s => s.shortCategory === cat).map(s => s.id)
+            );
+          }
+          renderSchoolChips();
+          renderAll();
+        });
+      });
+
+      // Szuflada wyboru szkół
+      document.getElementById('btnToggleSchoolsDrawer').addEventListener('click', () => {
+        document.getElementById('schoolsDrawer').classList.toggle('open');
+      });
+
+      document.getElementById('btnSelectAllSchools').addEventListener('click', () => {
+        state.selectedSchoolIds = new Set(state.schools.map(s => s.id));
+        renderSchoolChips();
+        renderAll();
+      });
+
+      document.getElementById('btnInvertSchools').addEventListener('click', () => {
+        const next = new Set();
+        state.schools.forEach(s => {
+          if (!state.selectedSchoolIds.has(s.id)) next.add(s.id);
+        });
+        if (next.size > 0) {
+          state.selectedSchoolIds = next;
+          renderSchoolChips();
+          renderAll();
+        }
+      });
+
+      // Przełącznik trybu trendu
+      document.querySelectorAll('#trendModeTabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#trendModeTabs .tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.trendMode = btn.getAttribute('data-mode');
+          renderTrendChart(getActiveYears(), getActiveSchools());
+        });
+      });
+
+      // Kontrolki rankingu
+      document.getElementById('rankingYearModeSelect').addEventListener('change', (e) => {
+        state.rankingYearMode = e.target.value;
+        renderRankingChart(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('rankingSortSelect').addEventListener('change', (e) => {
+        state.rankingSort = e.target.value;
+        renderRankingChart(getActiveYears(), getActiveSchools());
+      });
+
+      // Kontrolki udziałów %
+      document.querySelectorAll('#shareModeTabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#shareModeTabs .tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.shareMode = btn.getAttribute('data-share');
+          renderShareChart(getActiveYears(), getActiveSchools());
+        });
+      });
+
+      // Kontrolki komparatora
+      document.querySelectorAll('#compModeTabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('#compModeTabs .tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.compMode = btn.getAttribute('data-comp');
+          document.getElementById('compYearsToolbar').style.display = state.compMode === 'YEARS' ? 'flex' : 'none';
+          document.getElementById('compSchoolsToolbar').style.display = state.compMode === 'SCHOOLS' ? 'flex' : 'none';
+          renderComparator(getActiveYears(), getActiveSchools());
+        });
+      });
+
+      document.getElementById('compYearASelect').addEventListener('change', (e) => {
+        state.compYearA = Number(e.target.value);
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+      document.getElementById('compYearBSelect').addEventListener('change', (e) => {
+        state.compYearB = Number(e.target.value);
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('btnPresetPeakVsLast').addEventListener('click', () => {
+        state.compYearA = state.years.includes(2010) ? 2010 : state.years[0];
+        state.compYearB = state.years[state.years.length - 1];
+        document.getElementById('compYearASelect').value = state.compYearA;
+        document.getElementById('compYearBSelect').value = state.compYearB;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('btnPresetFirstVsLast').addEventListener('click', () => {
+        state.compYearA = state.years[0];
+        state.compYearB = state.years[state.years.length - 1];
+        document.getElementById('compYearASelect').value = state.compYearA;
+        document.getElementById('compYearBSelect').value = state.compYearB;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('btnPresetPrevVsLast').addEventListener('click', () => {
+        state.compYearA = state.years[Math.max(0, state.years.length - 2)];
+        state.compYearB = state.years[state.years.length - 1];
+        document.getElementById('compYearASelect').value = state.compYearA;
+        document.getElementById('compYearBSelect').value = state.compYearB;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('compSchool1Select').addEventListener('change', (e) => {
+        state.compSchool1 = e.target.value;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+      document.getElementById('compSchool2Select').addEventListener('change', (e) => {
+        state.compSchool2 = e.target.value;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+      document.getElementById('compSchool3Select').addEventListener('change', (e) => {
+        state.compSchool3 = e.target.value;
+        renderComparator(getActiveYears(), getActiveSchools());
+      });
+
+      // Kontrolki mapy ciepła
+      document.getElementById('heatmapColorModeSelect').addEventListener('change', (e) => {
+        state.heatmapColorMode = e.target.value;
+        renderHeatmapTable(getActiveYears(), getActiveSchools());
+      });
+
+      document.getElementById('matrixSearchInput').addEventListener('input', (e) => {
+        state.matrixSearch = e.target.value;
+        renderHeatmapTable(getActiveYears(), getActiveSchools());
+      });
+
+      // Eksport aktualnego widoku macierzy do CSV (z BOM UTF-8 dla Excela)
+      document.getElementById('btnExportCsv').addEventListener('click', exportCurrentViewToCsv);
+
+      // Wgrywanie nowych plików .xlsx w przeglądarce
+      const fileInput = document.getElementById('fileUploadInput');
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+          handleUploadedFiles(Array.from(e.target.files));
+        }
+      });
+
+      // Drag & Drop na całym oknie
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const xlsxFiles = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+          if (xlsxFiles.length > 0) {
+            handleUploadedFiles(xlsxFiles);
+          }
+        }
+      });
+    }
+
+    // Eksport macierzy do CSV
+    function exportCurrentViewToCsv() {
+      const activeYears = getActiveYears();
+      const activeSchools = getActiveSchools();
+      const sep = ';';
+      const headers = ['Obwód', 'Szkoła (siedziba)', 'Kategoria', ...activeYears, 'SUMA', 'ŚREDNIA'];
+      const lines = [headers.join(sep)];
+
+      activeSchools.forEach(s => {
+        const vals = activeYears.map(y => getVal(s, y));
+        const sum = vals.reduce((a, b) => a + b, 0);
+        const avg = vals.length ? (sum / vals.length).toFixed(1).replace('.', ',') : '0';
+        lines.push([s.id, `"${s.name}"`, `"${s.category}"`, ...vals, sum, avg].join(sep));
+      });
+
+      const csvContent = '\uFEFF' + lines.join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `zameldowani_${state.yearFrom}_${state.yearTo}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Wczytywanie dodatkowych lub zaktualizowanych plików .xlsx w przeglądarce
+    async function handleUploadedFiles(files) {
+      if (typeof XLSX === 'undefined') {
+        alert('Biblioteka SheetJS (XLSX) nie jest dostępna. Użyj skryptu aktualizuj_dane.bat w folderze.');
+        return;
+      }
+
+      let updatedYears = [];
+      const yearsSet = new Set(state.years);
+      const schoolsById = {};
+      state.schools.forEach(s => { schoolsById[s.id] = s; });
+
+      for (const file of files) {
+        const match = file.name.match(/(\d{4})/);
+        if (!match) continue;
+        const year = Number(match[1]);
+        yearsSet.add(year);
+        updatedYears.push(year);
+
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const firstSheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
+        for (let i = 1; i < rows.length; i++) {
+          const r = rows[i];
+          if (!r || r.length < 2) continue;
+          const obwod = String(r[0] || '').trim();
+          const count = parseInt(String(r[1] || '0').trim(), 10) || 0;
+          const siedzibaRaw = String(r[2] || '').trim();
+
+          if (obwod === 'SUMA' || obwod === 'OBWÓD 100' || obwod === 'OBWÓD 101') continue;
+          const obwMatch = obwod.match(/^OBWÓD\s+(\d+)$/i);
+          if (!obwMatch) continue;
+          const obwNum = parseInt(obwMatch[1], 10);
+          const cleanName = siedzibaRaw.replace(/^[wW]\s+/, '').trim();
+
+          if (!schoolsById[obwod]) {
+            const shortCategory = (obwNum === 22 || obwNum === 23) ? 'Podmiejskie' : 'Miejskie';
+            const category = shortCategory === 'Podmiejskie'
+              ? 'Obwody podmiejskie (Chełmiec / Piątkowa)'
+              : 'Szkoły miejskie (SP nr 1–21)';
+            const shortName = cleanName
+              .replace(/^SZKOŁA PODSTAWOWA NR\s+/i, 'SP nr ')
+              .replace(/^SZKOŁA PODSTAWOWA W\s+CHEŁMCU$/i, 'SP w Chełmcu')
+              .replace(/^SZKOŁA PODSTAWOWA W\s+PIĄTKOWEJ$/i, 'SP w Piątkowej');
+
+            const newSchool = {
+              id: obwod,
+              num: obwNum,
+              name: cleanName,
+              shortName,
+              category,
+              shortCategory,
+              values: {},
+              color: SCHOOL_PALETTE[state.schools.length % SCHOOL_PALETTE.length]
+            };
+            state.schools.push(newSchool);
+            schoolsById[obwod] = newSchool;
+            state.selectedSchoolIds.add(obwod);
+          }
+          schoolsById[obwod].values[String(year)] = count;
+        }
+      }
+
+      if (updatedYears.length > 0) {
+        state.years = Array.from(yearsSet).sort((a, b) => a - b);
+        state.schools.sort((a, b) => a.num - b.num);
+        state.yearFrom = state.years[0];
+        state.yearTo = state.years[state.years.length - 1];
+        populateControls();
+        renderAll();
+
+        const banner = document.getElementById('uploadStatusBanner');
+        banner.className = 'drop-banner active';
+        banner.innerHTML = `✅ <strong>Wczytano pomyślnie (${updatedYears.length} plik/pliki):</strong> zaktualizowano roczniki <strong>${updatedYears.join(', ')}</strong>. Wszystkie wykresy i tabele zostały odświeżone.`;
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      bindEvents();
+      initData(INITIAL_DATA);
+    });
+  </script>
+</body>
+</html>
