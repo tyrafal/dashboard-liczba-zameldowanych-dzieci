@@ -84,6 +84,39 @@ function Escape-Xml {
     return [System.Security.SecurityElement]::Escape($Text)
 }
 
+function New-CellXml {
+    param(
+        [string]$ColLetter,
+        [int]$RowIndex,
+        $Value,
+        [int]$StyleIndex = 0,
+        [string]$Type = 'n',
+        [string]$Formula = ''
+    )
+    $ref = "$ColLetter$RowIndex"
+    if ($Type -eq 's') {
+        $escaped = Escape-Xml ([string]$Value)
+        return "<c r=`"$ref`" s=`"$StyleIndex`" t=`"inlineStr`"><is><t>$escaped</t></is></c>"
+    }
+    elseif ($Type -eq 'f') {
+        $valStr = if ($null -ne $Value -and $Value -ne '') { "<v>$([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0}', $Value))</v>" } else { '' }
+        return "<c r=`"$ref`" s=`"$StyleIndex`"><f>$Formula</f>$valStr</c>"
+    }
+    else {
+        $numStr = [string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0}', $Value)
+        return "<c r=`"$ref`" s=`"$StyleIndex`"><v>$numStr</v></c>"
+    }
+}
+
+function Add-ZipTextEntry {
+    param($ZipArchive, [string]$EntryPath, [string]$Content)
+    $entry = $ZipArchive.CreateEntry($EntryPath)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $sw = New-Object System.IO.StreamWriter($entry.Open(), $utf8NoBom)
+    $sw.Write($Content)
+    $sw.Close()
+}
+
 Write-Host "Wczytywanie plikow rocznikowych .xlsx z katalogu: $WorkDir" -ForegroundColor Cyan
 
 $yearFiles = Get-ChildItem -Path $WorkDir -Filter '*.xlsx' | Where-Object { $_.BaseName -match '^\d{4}$' } | Sort-Object { [int]$_.BaseName }
@@ -92,14 +125,13 @@ if ($yearFiles.Count -eq 0) {
     throw "Nie znaleziono plikow rocznikowych RRRR.xlsx (np. 2001.xlsx) w folderze $WorkDir"
 }
 
-$years = @()
+$allYears = @()
 $schoolsMap = [ordered]@{}
-$yearTotals = @{}
-$flatRecords = New-Object System.Collections.Generic.List[object]
+$allYearTotals = @{}
 
 foreach ($file in $yearFiles) {
     $year = [int]$file.BaseName
-    $years += $year
+    $allYears += $year
     $rows = Read-SourceXlsx -FilePath $file.FullName
     $yearSum = 0
 
@@ -145,145 +177,139 @@ foreach ($file in $yearFiles) {
         $schoolsMap[$obwodRaw].ValuesByYear[$year] = $countVal
         $yearSum += $countVal
     }
-    $yearTotals[$year] = $yearSum
+    $allYearTotals[$year] = $yearSum
 }
 
 $schoolsList = @($schoolsMap.Values | Sort-Object ObwodNum)
-$grandTotal = ($yearTotals.Values | Measure-Object -Sum).Sum
 
-foreach ($y in $years) {
-    $yTotal = $yearTotals[$y]
-    foreach ($s in $schoolsList) {
-        $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
-        $share = if ($yTotal -gt 0) { [math]::Round(($val / $yTotal) * 100, 2) } else { 0 }
-        $flatRecords.Add([PSCustomObject]@{
-            Rocznik   = $y
-            ObwodNum  = $s.ObwodNum
-            Obwod     = $s.Obwod
-            Szkola    = $s.Siedziba
-            ShortName = $s.ShortName
-            Kategoria = $s.Kategoria
-            Liczba    = $val
-            UdzialPct = $share
-        })
-    }
-}
-
-Write-Host ("Wczytano {0} rocznikow ({1}-{2}), {3} obwodow szkolnych, laczna suma zameldowanych: {4}" -f $years.Count, $years[0], $years[-1], $schoolsList.Count, $grandTotal) -ForegroundColor Green
-
-# ==============================================================================
-# BUDOWA ZBIORCZEGO PLIKU EXCEL (.XLSX)
-# ==============================================================================
-$excelOutPath = Join-Path $WorkDir "zbiorczy_raport_2001_2026.xlsx"
-if (Test-Path $excelOutPath) { Remove-Item $excelOutPath -Force }
-
-function New-CellXml {
+function Build-DashboardAndExcelVariant {
     param(
-        [string]$ColLetter,
-        [int]$RowIndex,
-        $Value,
-        [int]$StyleIndex = 0,
-        [string]$Type = 'n',
-        [string]$Formula = ''
+        [int]$MinYear,
+        [int]$MaxYear,
+        [string]$ExcelFileName,
+        [string[]]$HtmlFileNames
     )
-    $ref = "$ColLetter$RowIndex"
-    if ($Type -eq 's') {
-        $escaped = Escape-Xml ([string]$Value)
-        return "<c r=`"$ref`" s=`"$StyleIndex`" t=`"inlineStr`"><is><t>$escaped</t></is></c>"
+
+    $years = @($allYears | Where-Object { $_ -ge $MinYear -and $_ -le $MaxYear })
+    if ($years.Count -eq 0) {
+        Write-Warning "Brak rocznikow w zakresie $MinYear-$MaxYear"
+        return
     }
-    elseif ($Type -eq 'f') {
-        $valStr = if ($null -ne $Value -and $Value -ne '') { "<v>$([string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0}', $Value))</v>" } else { '' }
-        return "<c r=`"$ref`" s=`"$StyleIndex`"><f>$Formula</f>$valStr</c>"
+
+    $yearTotals = @{}
+    foreach ($y in $years) {
+        $yearTotals[$y] = $allYearTotals[$y]
     }
-    else {
-        $numStr = [string]::Format([System.Globalization.CultureInfo]::InvariantCulture, '{0}', $Value)
-        return "<c r=`"$ref`" s=`"$StyleIndex`"><v>$numStr</v></c>"
+    $grandTotal = ($yearTotals.Values | Measure-Object -Sum).Sum
+
+    $flatRecords = New-Object System.Collections.Generic.List[object]
+    foreach ($y in $years) {
+        $yTotal = $yearTotals[$y]
+        foreach ($s in $schoolsList) {
+            $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
+            $share = if ($yTotal -gt 0) { [math]::Round(($val / $yTotal) * 100, 2) } else { 0 }
+            $flatRecords.Add([PSCustomObject]@{
+                Rocznik   = $y
+                ObwodNum  = $s.ObwodNum
+                Obwod     = $s.Obwod
+                Szkola    = $s.Siedziba
+                ShortName = $s.ShortName
+                Kategoria = $s.Kategoria
+                Liczba    = $val
+                UdzialPct = $share
+            })
+        }
     }
-}
 
-# ------------------------------------------------------------------------------
-# ARKUSZ 1: Macierz_Szkoly_Roczniki
-# ------------------------------------------------------------------------------
-$s1Rows = New-Object System.Text.StringBuilder
-$lastYearColLetter = ConvertTo-ExcelCol (3 + $years.Count)
-$sumColLetter = ConvertTo-ExcelCol (3 + $years.Count + 1)
-$avgColLetter = ConvertTo-ExcelCol (3 + $years.Count + 2)
-$minColLetter = ConvertTo-ExcelCol (3 + $years.Count + 3)
-$maxColLetter = ConvertTo-ExcelCol (3 + $years.Count + 4)
-$pctColLetter = ConvertTo-ExcelCol (3 + $years.Count + 5)
+    Write-Host ("Variant {0}-{1}: {2} rocznikow, {3} obwodow szkolnych, suma zameldowanych: {4}" -f $years[0], $years[-1], $years.Count, $schoolsList.Count, $grandTotal) -ForegroundColor Green
 
-[void]$s1Rows.Append('<row r="1" ht="28" customHeight="1">')
-[void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value $S_OKREG_OBWOD -StyleIndex 1 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex 1 -Value $S_SZKOLA_HDR -StyleIndex 1 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex 1 -Value 'KATEGORIA' -StyleIndex 1 -Type 's'))
-for ($yi = 0; $yi -lt $years.Count; $yi++) {
-    $cLet = ConvertTo-ExcelCol (4 + $yi)
-    [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex 1 -Value $years[$yi] -StyleIndex 1 -Type 'n'))
-}
-[void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex 1 -Value 'SUMA' -StyleIndex 2 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex 1 -Value $S_SREDNIA -StyleIndex 2 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex 1 -Value 'MIN' -StyleIndex 2 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex 1 -Value 'MAX' -StyleIndex 2 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex 1 -Value $S_UDZIAL_PCT -StyleIndex 2 -Type 's'))
-[void]$s1Rows.Append('</row>')
+    # ==============================================================================
+    # BUDOWA ZBIORCZEGO PLIKU EXCEL (.XLSX)
+    # ==============================================================================
+    $excelOutPath = Join-Path $WorkDir $ExcelFileName
+    if (Test-Path $excelOutPath) { Remove-Item $excelOutPath -Force }
 
-$rowIdx = 2
-$lastSchoolRow = 1 + $schoolsList.Count
-foreach ($s in $schoolsList) {
-    [void]$s1Rows.Append("<row r=`"$rowIdx`" ht=`"20`" customHeight=`"1`">")
-    [void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rowIdx -Value $s.Obwod -StyleIndex 3 -Type 's'))
-    [void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $rowIdx -Value $s.Siedziba -StyleIndex 4 -Type 's'))
-    [void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $rowIdx -Value $s.ShortCategory -StyleIndex 3 -Type 's'))
+    # ARKUSZ 1: Macierz_Szkoly_Roczniki
+    $s1Rows = New-Object System.Text.StringBuilder
+    $lastYearColLetter = ConvertTo-ExcelCol (3 + $years.Count)
+    $sumColLetter = ConvertTo-ExcelCol (3 + $years.Count + 1)
+    $avgColLetter = ConvertTo-ExcelCol (3 + $years.Count + 2)
+    $minColLetter = ConvertTo-ExcelCol (3 + $years.Count + 3)
+    $maxColLetter = ConvertTo-ExcelCol (3 + $years.Count + 4)
+    $pctColLetter = ConvertTo-ExcelCol (3 + $years.Count + 5)
 
-    $vals = @()
+    [void]$s1Rows.Append('<row r="1" ht="28" customHeight="1">')
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value $S_OKREG_OBWOD -StyleIndex 1 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex 1 -Value $S_SZKOLA_HDR -StyleIndex 1 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex 1 -Value 'KATEGORIA' -StyleIndex 1 -Type 's'))
+    for ($yi = 0; $yi -lt $years.Count; $yi++) {
+        $cLet = ConvertTo-ExcelCol (4 + $yi)
+        [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex 1 -Value $years[$yi] -StyleIndex 1 -Type 'n'))
+    }
+    [void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex 1 -Value 'SUMA' -StyleIndex 2 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex 1 -Value $S_SREDNIA -StyleIndex 2 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex 1 -Value 'MIN' -StyleIndex 2 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex 1 -Value 'MAX' -StyleIndex 2 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex 1 -Value $S_UDZIAL_PCT -StyleIndex 2 -Type 's'))
+    [void]$s1Rows.Append('</row>')
+
+    $rowIdx = 2
+    $lastSchoolRow = 1 + $schoolsList.Count
+    foreach ($s in $schoolsList) {
+        [void]$s1Rows.Append("<row r=`"$rowIdx`" ht=`"20`" customHeight=`"1`">")
+        [void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rowIdx -Value $s.Obwod -StyleIndex 3 -Type 's'))
+        [void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $rowIdx -Value $s.Siedziba -StyleIndex 4 -Type 's'))
+        [void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $rowIdx -Value $s.ShortCategory -StyleIndex 3 -Type 's'))
+
+        $vals = @()
+        for ($yi = 0; $yi -lt $years.Count; $yi++) {
+            $y = $years[$yi]
+            $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
+            $vals += $val
+            $cLet = ConvertTo-ExcelCol (4 + $yi)
+            [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $rowIdx -Value $val -StyleIndex 5 -Type 'n'))
+        }
+        $rSum = ($vals | Measure-Object -Sum).Sum
+        $rAvg = [math]::Round(($vals | Measure-Object -Average).Average, 1)
+        $rMin = ($vals | Measure-Object -Minimum).Minimum
+        $rMax = ($vals | Measure-Object -Maximum).Maximum
+        $rPct = if ($grandTotal -gt 0) { [math]::Round($rSum / $grandTotal, 4) } else { 0 }
+
+        $rangeRef = "D$rowIdx`:$lastYearColLetter$rowIdx"
+        $sumRowIdx = $lastSchoolRow + 1
+        [void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex $rowIdx -Value $rSum -StyleIndex 6 -Type 'f' -Formula "SUM($rangeRef)"))
+        [void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex $rowIdx -Value $rAvg -StyleIndex 7 -Type 'f' -Formula "AVERAGE($rangeRef)"))
+        [void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex $rowIdx -Value $rMin -StyleIndex 5 -Type 'f' -Formula "MIN($rangeRef)"))
+        [void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex $rowIdx -Value $rMax -StyleIndex 5 -Type 'f' -Formula "MAX($rangeRef)"))
+        [void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex $rowIdx -Value $rPct -StyleIndex 8 -Type 'f' -Formula "$sumColLetter$rowIdx/`$$sumColLetter`$$sumRowIdx"))
+        [void]$s1Rows.Append('</row>')
+        $rowIdx++
+    }
+
+    $sumRowIdx = $lastSchoolRow + 1
+    [void]$s1Rows.Append("<row r=`"$sumRowIdx`" ht=`"24`" customHeight=`"1`">")
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $sumRowIdx -Value 'SUMA' -StyleIndex 9 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $sumRowIdx -Value $S_WSZYSTKIE_SZ -StyleIndex 9 -Type 's'))
+    [void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $sumRowIdx -Value $S_OGOLEM -StyleIndex 9 -Type 's'))
     for ($yi = 0; $yi -lt $years.Count; $yi++) {
         $y = $years[$yi]
-        $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
-        $vals += $val
         $cLet = ConvertTo-ExcelCol (4 + $yi)
-        [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $rowIdx -Value $val -StyleIndex 5 -Type 'n'))
+        $yTotal = $yearTotals[$y]
+        [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $sumRowIdx -Value $yTotal -StyleIndex 10 -Type 'f' -Formula "SUM($cLet`2:$cLet$lastSchoolRow)"))
     }
-    $rSum = ($vals | Measure-Object -Sum).Sum
-    $rAvg = [math]::Round(($vals | Measure-Object -Average).Average, 1)
-    $rMin = ($vals | Measure-Object -Minimum).Minimum
-    $rMax = ($vals | Measure-Object -Maximum).Maximum
-    $rPct = if ($grandTotal -gt 0) { [math]::Round($rSum / $grandTotal, 4) } else { 0 }
+    $avgYearTotal = [math]::Round(($yearTotals.Values | Measure-Object -Average).Average, 1)
+    $minYearTotal = ($yearTotals.Values | Measure-Object -Minimum).Minimum
+    $maxYearTotal = ($yearTotals.Values | Measure-Object -Maximum).Maximum
+    $sumRangeYears = "D$sumRowIdx`:$lastYearColLetter$sumRowIdx"
 
-    $rangeRef = "D$rowIdx`:$lastYearColLetter$rowIdx"
-    $sumRowIdx = $lastSchoolRow + 1
-    [void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex $rowIdx -Value $rSum -StyleIndex 6 -Type 'f' -Formula "SUM($rangeRef)"))
-    [void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex $rowIdx -Value $rAvg -StyleIndex 7 -Type 'f' -Formula "AVERAGE($rangeRef)"))
-    [void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex $rowIdx -Value $rMin -StyleIndex 5 -Type 'f' -Formula "MIN($rangeRef)"))
-    [void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex $rowIdx -Value $rMax -StyleIndex 5 -Type 'f' -Formula "MAX($rangeRef)"))
-    [void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex $rowIdx -Value $rPct -StyleIndex 8 -Type 'f' -Formula "$sumColLetter$rowIdx/`$$sumColLetter`$$sumRowIdx"))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex $sumRowIdx -Value $grandTotal -StyleIndex 10 -Type 'f' -Formula "SUM($sumColLetter`2:$sumColLetter$lastSchoolRow)"))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex $sumRowIdx -Value $avgYearTotal -StyleIndex 11 -Type 'f' -Formula "AVERAGE($sumRangeYears)"))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex $sumRowIdx -Value $minYearTotal -StyleIndex 10 -Type 'f' -Formula "MIN($sumRangeYears)"))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex $sumRowIdx -Value $maxYearTotal -StyleIndex 10 -Type 'f' -Formula "MAX($sumRangeYears)"))
+    [void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex $sumRowIdx -Value 1 -StyleIndex 12 -Type 'f' -Formula "SUM($pctColLetter`2:$pctColLetter$lastSchoolRow)"))
     [void]$s1Rows.Append('</row>')
-    $rowIdx++
-}
 
-$sumRowIdx = $lastSchoolRow + 1
-[void]$s1Rows.Append("<row r=`"$sumRowIdx`" ht=`"24`" customHeight=`"1`">")
-[void]$s1Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $sumRowIdx -Value 'SUMA' -StyleIndex 9 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $sumRowIdx -Value $S_WSZYSTKIE_SZ -StyleIndex 9 -Type 's'))
-[void]$s1Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $sumRowIdx -Value $S_OGOLEM -StyleIndex 9 -Type 's'))
-for ($yi = 0; $yi -lt $years.Count; $yi++) {
-    $y = $years[$yi]
-    $cLet = ConvertTo-ExcelCol (4 + $yi)
-    $yTotal = $yearTotals[$y]
-    [void]$s1Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $sumRowIdx -Value $yTotal -StyleIndex 10 -Type 'f' -Formula "SUM($cLet`2:$cLet$lastSchoolRow)"))
-}
-$avgYearTotal = [math]::Round(($yearTotals.Values | Measure-Object -Average).Average, 1)
-$minYearTotal = ($yearTotals.Values | Measure-Object -Minimum).Minimum
-$maxYearTotal = ($yearTotals.Values | Measure-Object -Maximum).Maximum
-$sumRangeYears = "D$sumRowIdx`:$lastYearColLetter$sumRowIdx"
-
-[void]$s1Rows.Append((New-CellXml -ColLetter $sumColLetter -RowIndex $sumRowIdx -Value $grandTotal -StyleIndex 10 -Type 'f' -Formula "SUM($sumColLetter`2:$sumColLetter$lastSchoolRow)"))
-[void]$s1Rows.Append((New-CellXml -ColLetter $avgColLetter -RowIndex $sumRowIdx -Value $avgYearTotal -StyleIndex 11 -Type 'f' -Formula "AVERAGE($sumRangeYears)"))
-[void]$s1Rows.Append((New-CellXml -ColLetter $minColLetter -RowIndex $sumRowIdx -Value $minYearTotal -StyleIndex 10 -Type 'f' -Formula "MIN($sumRangeYears)"))
-[void]$s1Rows.Append((New-CellXml -ColLetter $maxColLetter -RowIndex $sumRowIdx -Value $maxYearTotal -StyleIndex 10 -Type 'f' -Formula "MAX($sumRangeYears)"))
-[void]$s1Rows.Append((New-CellXml -ColLetter $pctColLetter -RowIndex $sumRowIdx -Value 1 -StyleIndex 12 -Type 'f' -Formula "SUM($pctColLetter`2:$pctColLetter$lastSchoolRow)"))
-[void]$s1Rows.Append('</row>')
-
-$s1ColsXml = @"
+    $s1ColsXml = @"
 <cols>
   <col min="1" max="1" width="14" customWidth="1"/>
   <col min="2" max="2" width="36" customWidth="1"/>
@@ -293,7 +319,7 @@ $s1ColsXml = @"
 </cols>
 "@
 
-$sheet1Xml = @"
+    $sheet1Xml = @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
@@ -323,72 +349,73 @@ $sheet1Xml = @"
 </worksheet>
 "@
 
-# ------------------------------------------------------------------------------
-# ARKUSZ 2: Roczniki_Szkoly
-# ------------------------------------------------------------------------------
-$s2Rows = New-Object System.Text.StringBuilder
-$lastSchoolColS2 = ConvertTo-ExcelCol (1 + $schoolsList.Count)
-$s2SumCol = ConvertTo-ExcelCol (2 + $schoolsList.Count)
-$s2AvgCol = ConvertTo-ExcelCol (3 + $schoolsList.Count)
-$s2MinCol = ConvertTo-ExcelCol (4 + $schoolsList.Count)
-$s2MaxCol = ConvertTo-ExcelCol (5 + $schoolsList.Count)
+    # ARKUSZ 2: Roczniki_Szkoly
+    $s2Rows = New-Object System.Text.StringBuilder
+    $lastSchoolColS2 = ConvertTo-ExcelCol (1 + $schoolsList.Count)
+    $s2SumCol = ConvertTo-ExcelCol (2 + $schoolsList.Count)
+    $s2AvgCol = ConvertTo-ExcelCol (3 + $schoolsList.Count)
+    $s2MinCol = ConvertTo-ExcelCol (4 + $schoolsList.Count)
+    $s2MaxCol = ConvertTo-ExcelCol (5 + $schoolsList.Count)
 
-[void]$s2Rows.Append('<row r="1" ht="30" customHeight="1">')
-[void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value 'ROCZNIK' -StyleIndex 1 -Type 's'))
-for ($si = 0; $si -lt $schoolsList.Count; $si++) {
-    $cLet = ConvertTo-ExcelCol (2 + $si)
-    $headerLabel = "$($schoolsList[$si].ShortName) ($($schoolsList[$si].Obwod))"
-    [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex 1 -Value $headerLabel -StyleIndex 1 -Type 's'))
-}
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex 1 -Value 'SUMA ROCZNIKA' -StyleIndex 2 -Type 's'))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex 1 -Value $S_SREDNIA_SZK -StyleIndex 2 -Type 's'))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex 1 -Value 'MIN' -StyleIndex 2 -Type 's'))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex 1 -Value 'MAX' -StyleIndex 2 -Type 's'))
-[void]$s2Rows.Append('</row>')
+    [void]$s2Rows.Append('<row r="1" ht="30" customHeight="1">')
+    [void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value 'ROCZNIK' -StyleIndex 1 -Type 's'))
+    for ($si = 0; $si -lt $schoolsList.Count; $si++) {
+        $cLet = ConvertTo-ExcelCol (2 + $si)
+        $headerLabel = "$($schoolsList[$si].ShortName) ($($schoolsList[$si].Obwod))"
+        [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex 1 -Value $headerLabel -StyleIndex 1 -Type 's'))
+    }
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex 1 -Value 'SUMA ROCZNIKA' -StyleIndex 2 -Type 's'))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex 1 -Value $S_SREDNIA_SZK -StyleIndex 2 -Type 's'))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex 1 -Value 'MIN' -StyleIndex 2 -Type 's'))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex 1 -Value 'MAX' -StyleIndex 2 -Type 's'))
+    [void]$s2Rows.Append('</row>')
 
-$rIdx2 = 2
-$lastYearRowS2 = 1 + $years.Count
-foreach ($y in $years) {
-    [void]$s2Rows.Append("<row r=`"$rIdx2`" ht=`"20`" customHeight=`"1`">")
-    [void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rIdx2 -Value $y -StyleIndex 3 -Type 'n'))
-    $valsY = @()
+    $rIdx2 = 2
+    $lastYearRowS2 = 1 + $years.Count
+    foreach ($y in $years) {
+        [void]$s2Rows.Append("<row r=`"$rIdx2`" ht=`"20`" customHeight=`"1`">")
+        [void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rIdx2 -Value $y -StyleIndex 3 -Type 'n'))
+        $valsY = @()
+        for ($si = 0; $si -lt $schoolsList.Count; $si++) {
+            $s = $schoolsList[$si]
+            $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
+            $valsY += $val
+            $cLet = ConvertTo-ExcelCol (2 + $si)
+            [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $rIdx2 -Value $val -StyleIndex 5 -Type 'n'))
+        }
+        $ySum = ($valsY | Measure-Object -Sum).Sum
+        $yAvg = [math]::Round(($valsY | Measure-Object -Average).Average, 1)
+        $yMin = ($valsY | Measure-Object -Minimum).Minimum
+        $yMax = ($valsY | Measure-Object -Maximum).Maximum
+        $rowRangeS2 = "B$rIdx2`:$lastSchoolColS2$rIdx2"
+
+        [void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex $rIdx2 -Value $ySum -StyleIndex 6 -Type 'f' -Formula "SUM($rowRangeS2)"))
+        [void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex $rIdx2 -Value $yAvg -StyleIndex 7 -Type 'f' -Formula "AVERAGE($rowRangeS2)"))
+        [void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex $rIdx2 -Value $yMin -StyleIndex 5 -Type 'f' -Formula "MIN($rowRangeS2)"))
+        [void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex $rIdx2 -Value $yMax -StyleIndex 5 -Type 'f' -Formula "MAX($rowRangeS2)"))
+        [void]$s2Rows.Append('</row>')
+        $rIdx2++
+    }
+
+    $sumRowS2 = $lastYearRowS2 + 1
+    [void]$s2Rows.Append("<row r=`"$sumRowS2`" ht=`"24`" customHeight=`"1`">")
+    [void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $sumRowS2 -Value 'SUMA' -StyleIndex 9 -Type 's'))
     for ($si = 0; $si -lt $schoolsList.Count; $si++) {
         $s = $schoolsList[$si]
-        $val = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
-        $valsY += $val
         $cLet = ConvertTo-ExcelCol (2 + $si)
-        [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $rIdx2 -Value $val -StyleIndex 5 -Type 'n'))
+        $sTotal = 0
+        foreach ($y in $years) {
+            if ($s.ValuesByYear.ContainsKey($y)) { $sTotal += $s.ValuesByYear[$y] }
+        }
+        [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $sumRowS2 -Value $sTotal -StyleIndex 10 -Type 'f' -Formula "SUM($cLet`2:$cLet$lastYearRowS2)"))
     }
-    $ySum = ($valsY | Measure-Object -Sum).Sum
-    $yAvg = [math]::Round(($valsY | Measure-Object -Average).Average, 1)
-    $yMin = ($valsY | Measure-Object -Minimum).Minimum
-    $yMax = ($valsY | Measure-Object -Maximum).Maximum
-    $rowRangeS2 = "B$rIdx2`:$lastSchoolColS2$rIdx2"
-
-    [void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex $rIdx2 -Value $ySum -StyleIndex 6 -Type 'f' -Formula "SUM($rowRangeS2)"))
-    [void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex $rIdx2 -Value $yAvg -StyleIndex 7 -Type 'f' -Formula "AVERAGE($rowRangeS2)"))
-    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex $rIdx2 -Value $yMin -StyleIndex 5 -Type 'f' -Formula "MIN($rowRangeS2)"))
-    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex $rIdx2 -Value $yMax -StyleIndex 5 -Type 'f' -Formula "MAX($rowRangeS2)"))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex $sumRowS2 -Value $grandTotal -StyleIndex 10 -Type 'f' -Formula "SUM($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex $sumRowS2 -Value ([math]::Round($grandTotal / $years.Count, 1)) -StyleIndex 11 -Type 'f' -Formula "AVERAGE($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex $sumRowS2 -Value $minYearTotal -StyleIndex 10 -Type 'f' -Formula "MIN($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
+    [void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex $sumRowS2 -Value $maxYearTotal -StyleIndex 10 -Type 'f' -Formula "MAX($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
     [void]$s2Rows.Append('</row>')
-    $rIdx2++
-}
 
-$sumRowS2 = $lastYearRowS2 + 1
-[void]$s2Rows.Append("<row r=`"$sumRowS2`" ht=`"24`" customHeight=`"1`">")
-[void]$s2Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $sumRowS2 -Value 'SUMA' -StyleIndex 9 -Type 's'))
-for ($si = 0; $si -lt $schoolsList.Count; $si++) {
-    $s = $schoolsList[$si]
-    $cLet = ConvertTo-ExcelCol (2 + $si)
-    $sTotal = ($s.ValuesByYear.Values | Measure-Object -Sum).Sum
-    [void]$s2Rows.Append((New-CellXml -ColLetter $cLet -RowIndex $sumRowS2 -Value $sTotal -StyleIndex 10 -Type 'f' -Formula "SUM($cLet`2:$cLet$lastYearRowS2)"))
-}
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2SumCol -RowIndex $sumRowS2 -Value $grandTotal -StyleIndex 10 -Type 'f' -Formula "SUM($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2AvgCol -RowIndex $sumRowS2 -Value ([math]::Round($grandTotal / $years.Count, 1)) -StyleIndex 11 -Type 'f' -Formula "AVERAGE($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2MinCol -RowIndex $sumRowS2 -Value $minYearTotal -StyleIndex 10 -Type 'f' -Formula "MIN($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
-[void]$s2Rows.Append((New-CellXml -ColLetter $s2MaxCol -RowIndex $sumRowS2 -Value $maxYearTotal -StyleIndex 10 -Type 'f' -Formula "MAX($s2SumCol`2:$s2SumCol$lastYearRowS2)"))
-[void]$s2Rows.Append('</row>')
-
-$sheet2Xml = @"
+    $sheet2Xml = @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
@@ -410,37 +437,35 @@ $sheet2Xml = @"
 </worksheet>
 "@
 
-# ------------------------------------------------------------------------------
-# ARKUSZ 3: Baza_Danych_Plaska
-# ------------------------------------------------------------------------------
-$s3Rows = New-Object System.Text.StringBuilder
-[void]$s3Rows.Append('<row r="1" ht="26" customHeight="1">')
-[void]$s3Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value 'Rocznik' -StyleIndex 1 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'B' -RowIndex 1 -Value 'Nr obwodu' -StyleIndex 1 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'C' -RowIndex 1 -Value $S_OBWOD_COL -StyleIndex 1 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'D' -RowIndex 1 -Value $S_SZKOLA_COL -StyleIndex 1 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'E' -RowIndex 1 -Value 'Kategoria' -StyleIndex 1 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'F' -RowIndex 1 -Value 'Liczba zameldowanych' -StyleIndex 2 -Type 's'))
-[void]$s3Rows.Append((New-CellXml -ColLetter 'G' -RowIndex 1 -Value $S_UDZIAL_ROCZ -StyleIndex 2 -Type 's'))
-[void]$s3Rows.Append('</row>')
-
-$rIdx3 = 2
-foreach ($rec in $flatRecords) {
-    [void]$s3Rows.Append("<row r=`"$rIdx3`" ht=`"19`">")
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rIdx3 -Value $rec.Rocznik -StyleIndex 3 -Type 'n'))
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $rIdx3 -Value $rec.ObwodNum -StyleIndex 3 -Type 'n'))
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $rIdx3 -Value $rec.Obwod -StyleIndex 3 -Type 's'))
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'D' -RowIndex $rIdx3 -Value $rec.Szkola -StyleIndex 4 -Type 's'))
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'E' -RowIndex $rIdx3 -Value $rec.Kategoria -StyleIndex 4 -Type 's'))
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'F' -RowIndex $rIdx3 -Value $rec.Liczba -StyleIndex 5 -Type 'n'))
-    $pctFrac = [math]::Round($rec.UdzialPct / 100.0, 4)
-    [void]$s3Rows.Append((New-CellXml -ColLetter 'G' -RowIndex $rIdx3 -Value $pctFrac -StyleIndex 8 -Type 'n'))
+    # ARKUSZ 3: Baza_Danych_Plaska
+    $s3Rows = New-Object System.Text.StringBuilder
+    [void]$s3Rows.Append('<row r="1" ht="26" customHeight="1">')
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'A' -RowIndex 1 -Value 'Rocznik' -StyleIndex 1 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'B' -RowIndex 1 -Value 'Nr obwodu' -StyleIndex 1 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'C' -RowIndex 1 -Value $S_OBWOD_COL -StyleIndex 1 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'D' -RowIndex 1 -Value $S_SZKOLA_COL -StyleIndex 1 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'E' -RowIndex 1 -Value 'Kategoria' -StyleIndex 1 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'F' -RowIndex 1 -Value 'Liczba zameldowanych' -StyleIndex 2 -Type 's'))
+    [void]$s3Rows.Append((New-CellXml -ColLetter 'G' -RowIndex 1 -Value $S_UDZIAL_ROCZ -StyleIndex 2 -Type 's'))
     [void]$s3Rows.Append('</row>')
-    $rIdx3++
-}
-$lastRowS3 = $rIdx3 - 1
 
-$sheet3Xml = @"
+    $rIdx3 = 2
+    foreach ($rec in $flatRecords) {
+        [void]$s3Rows.Append("<row r=`"$rIdx3`" ht=`"19`">")
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'A' -RowIndex $rIdx3 -Value $rec.Rocznik -StyleIndex 3 -Type 'n'))
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'B' -RowIndex $rIdx3 -Value $rec.ObwodNum -StyleIndex 3 -Type 'n'))
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'C' -RowIndex $rIdx3 -Value $rec.Obwod -StyleIndex 3 -Type 's'))
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'D' -RowIndex $rIdx3 -Value $rec.Szkola -StyleIndex 4 -Type 's'))
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'E' -RowIndex $rIdx3 -Value $rec.Kategoria -StyleIndex 4 -Type 's'))
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'F' -RowIndex $rIdx3 -Value $rec.Liczba -StyleIndex 5 -Type 'n'))
+        $pctFrac = [math]::Round($rec.UdzialPct / 100.0, 4)
+        [void]$s3Rows.Append((New-CellXml -ColLetter 'G' -RowIndex $rIdx3 -Value $pctFrac -StyleIndex 8 -Type 'n'))
+        [void]$s3Rows.Append('</row>')
+        $rIdx3++
+    }
+    $lastRowS3 = $rIdx3 - 1
+
+    $sheet3Xml = @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheetViews>
@@ -464,7 +489,7 @@ $sheet3Xml = @"
 </worksheet>
 "@
 
-$stylesXml = @'
+    $stylesXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <numFmts count="3">
@@ -548,7 +573,7 @@ $stylesXml = @'
 </styleSheet>
 '@
 
-$workbookXml = @'
+    $workbookXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
@@ -559,7 +584,7 @@ $workbookXml = @'
 </workbook>
 '@
 
-$workbookRelsXml = @'
+    $workbookRelsXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
@@ -569,14 +594,14 @@ $workbookRelsXml = @'
 </Relationships>
 '@
 
-$rootRelsXml = @'
+    $rootRelsXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>
 '@
 
-$contentTypesXml = @'
+    $contentTypesXml = @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -589,71 +614,79 @@ $contentTypesXml = @'
 </Types>
 '@
 
-function Add-ZipTextEntry {
-    param($ZipArchive, [string]$EntryPath, [string]$Content)
-    $entry = $ZipArchive.CreateEntry($EntryPath)
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    $sw = New-Object System.IO.StreamWriter($entry.Open(), $utf8NoBom)
-    $sw.Write($Content)
-    $sw.Close()
-}
-
-$fs = New-Object System.IO.FileStream($excelOutPath, [System.IO.FileMode]::Create)
-$zipOut = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath '[Content_Types].xml' -Content $contentTypesXml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath '_rels/.rels' -Content $rootRelsXml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/workbook.xml' -Content $workbookXml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/_rels/workbook.xml.rels' -Content $workbookRelsXml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/styles.xml' -Content $stylesXml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet1.xml' -Content $sheet1Xml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet2.xml' -Content $sheet2Xml
-    Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet3.xml' -Content $sheet3Xml
-}
-finally {
-    $zipOut.Dispose()
-    $fs.Dispose()
-}
-
-Write-Host "Wygenerowano zbiorczy plik Excel: $excelOutPath" -ForegroundColor Green
-
-# ==============================================================================
-# PRZYGOTOWANIE PAYLOADU JSON I AKTUALIZACJA DASHBOARDU HTML
-# ==============================================================================
-$schoolsPayload = @()
-foreach ($s in $schoolsList) {
-    $valuesMap = [ordered]@{}
-    foreach ($y in $years) {
-        $valuesMap["$y"] = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
+    $fs = New-Object System.IO.FileStream($excelOutPath, [System.IO.FileMode]::Create)
+    $zipOut = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath '[Content_Types].xml' -Content $contentTypesXml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath '_rels/.rels' -Content $rootRelsXml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/workbook.xml' -Content $workbookXml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/_rels/workbook.xml.rels' -Content $workbookRelsXml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/styles.xml' -Content $stylesXml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet1.xml' -Content $sheet1Xml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet2.xml' -Content $sheet2Xml
+        Add-ZipTextEntry -ZipArchive $zipOut -EntryPath 'xl/worksheets/sheet3.xml' -Content $sheet3Xml
     }
-    $schoolsPayload += [PSCustomObject]@{
-        id            = $s.Obwod
-        num           = $s.ObwodNum
-        name          = $s.Siedziba
-        shortName     = $s.ShortName
-        category      = $s.Kategoria
-        shortCategory = $s.ShortCategory
-        values        = $valuesMap
+    finally {
+        $zipOut.Dispose()
+        $fs.Dispose()
     }
-}
 
-$payloadObj = [PSCustomObject]@{
-    generatedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm')
-    years       = $years
-    schools     = $schoolsPayload
-}
+    Write-Host "Wygenerowano zbiorczy plik Excel: $excelOutPath" -ForegroundColor Green
 
-$jsonString = $payloadObj | ConvertTo-Json -Depth 6 -Compress
+    # ==============================================================================
+    # PRZYGOTOWANIE PAYLOADU JSON I AKTUALIZACJA DASHBOARDU HTML
+    # ==============================================================================
+    $schoolsPayload = @()
+    foreach ($s in $schoolsList) {
+        $valuesMap = [ordered]@{}
+        foreach ($y in $years) {
+            $valuesMap["$y"] = if ($s.ValuesByYear.ContainsKey($y)) { $s.ValuesByYear[$y] } else { 0 }
+        }
+        $schoolsPayload += [PSCustomObject]@{
+            id            = $s.Obwod
+            num           = $s.ObwodNum
+            name          = $s.Siedziba
+            shortName     = $s.ShortName
+            category      = $s.Kategoria
+            shortCategory = $s.ShortCategory
+            values        = $valuesMap
+        }
+    }
 
-$htmlPath = Join-Path $WorkDir "dashboard_zameldowani.html"
-if (Test-Path $htmlPath) {
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    $htmlContent = [System.IO.File]::ReadAllText($htmlPath, $utf8NoBom)
-    $pattern = '(?s)/\*__DATA_START__\*/.*?/\*__DATA_END__\*/'
-    $replacement = "/*__DATA_START__*/const INITIAL_DATA = $jsonString;/*__DATA_END__*/"
-    if ($htmlContent -match $pattern) {
-        $updatedHtml = [regex]::Replace($htmlContent, $pattern, $replacement)
-        [System.IO.File]::WriteAllText($htmlPath, $updatedHtml, $utf8NoBom)
-        Write-Host "Zaktualizowano dane w pliku HTML: $htmlPath" -ForegroundColor Green
+    $payloadObj = [PSCustomObject]@{
+        generatedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm')
+        years       = $years
+        schools     = $schoolsPayload
+    }
+
+    $jsonString = $payloadObj | ConvertTo-Json -Depth 6 -Compress
+
+    foreach ($htmlFile in $HtmlFileNames) {
+        $htmlPath = Join-Path $WorkDir $htmlFile
+        if (Test-Path $htmlPath) {
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            $htmlContent = [System.IO.File]::ReadAllText($htmlPath, $utf8NoBom)
+            $pattern = '(?s)/\*__DATA_START__\*/.*?/\*__DATA_END__\*/'
+            $replacement = "/*__DATA_START__*/const INITIAL_DATA = $jsonString;/*__DATA_END__*/"
+            if ($htmlContent -match $pattern) {
+                $updatedHtml = [regex]::Replace($htmlContent, $pattern, $replacement)
+                [System.IO.File]::WriteAllText($htmlPath, $updatedHtml, $utf8NoBom)
+                Write-Host "Zaktualizowano dane w pliku HTML: $htmlPath" -ForegroundColor Green
+            }
+        }
     }
 }
+
+# 1. Pełny zakres roczników (2001–2026)
+Build-DashboardAndExcelVariant `
+    -MinYear 2001 `
+    -MaxYear 9999 `
+    -ExcelFileName "zbiorczy_raport_2001_2026.xlsx" `
+    -HtmlFileNames @("dashboard_zameldowani_2001_2026.html")
+
+# 2. Zakres roczników 2021–2026 (również jako główny index.html dla GitHub Pages)
+Build-DashboardAndExcelVariant `
+    -MinYear 2021 `
+    -MaxYear 2026 `
+    -ExcelFileName "zbiorczy_raport_2021_2026.xlsx" `
+    -HtmlFileNames @("dashboard_zameldowani_2021_2026.html", "index.html")
